@@ -23,7 +23,12 @@ namespace dsn {
             virtual int  apply_learn_state(::dsn::replication::learn_state& state);
 
         private:
-            rocksdb::DB* _db;
+            rocksdb::DB           *_db;
+            rocksdb::WriteOptions _wt_opts;
+            rocksdb::ReadOptions  _rd_opts;
+
+            std::atomic<bool>     _is_open;
+
         };
     }
 }
