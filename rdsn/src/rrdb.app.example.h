@@ -79,7 +79,7 @@ public:
 		{
 			::dsn::blob req;
 			//sync:
-			::dsn::blob resp;
+			read_response resp;
 			auto err = _rrdb_client->get(req, resp);
 			std::cout << "call RPC_RRDB_RRDB_GET end, return " << err.to_string() << std::endl;
 			//async: 

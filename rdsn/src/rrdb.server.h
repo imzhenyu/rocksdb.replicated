@@ -43,10 +43,10 @@ protected:
 		reply(resp);
 	}
 	// RPC_RRDB_RRDB_GET 
-	virtual void on_get(const ::dsn::blob& key, ::dsn::service::rpc_replier<::dsn::blob>& reply)
+	virtual void on_get(const ::dsn::blob& key, ::dsn::service::rpc_replier<read_response>& reply)
 	{
 		std::cout << "... exec RPC_RRDB_RRDB_GET ... (not implemented) " << std::endl;
-		::dsn::blob resp;
+		read_response resp;
 		reply(resp);
 	}
 	

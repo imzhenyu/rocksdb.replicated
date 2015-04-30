@@ -15,8 +15,6 @@ namespace dsn {
         {
             if (!_is_open)
             {
-                dassert(_last_committed_decree == static_cast<int64_t>(_db->GetLatestSequenceNumber()), "");
-
                 rocksdb::Slice skey(update.key.data(), update.key.length());
                 rocksdb::Slice svalue(update.value.data(), update.value.length());
                 rocksdb::Status status = _db->Put(_wt_opts, skey, svalue);
@@ -32,8 +30,6 @@ namespace dsn {
         {
             if (!_is_open)
             {
-                dassert(_last_committed_decree == static_cast<int64_t>(_db->GetLatestSequenceNumber()), "");
-
                 rocksdb::Slice skey(key.data(), key.length());
                 rocksdb::Status status = _db->Delete(_wt_opts, skey);
                 reply(status.code());
@@ -48,8 +44,6 @@ namespace dsn {
         {
             if (!_is_open)
             {
-                dassert(_last_committed_decree == static_cast<int64_t>(_db->GetLatestSequenceNumber()), "");
-
                 rocksdb::Slice skey(update.key.data(), update.key.length());
                 rocksdb::Slice svalue(update.value.data(), update.value.length());
                 rocksdb::Status status = _db->Merge(_wt_opts, skey, svalue);
@@ -61,25 +55,21 @@ namespace dsn {
             }
         }
 
-        void rrdb_service_impl::on_get(const ::dsn::blob& key, ::dsn::service::rpc_replier<::dsn::blob>& reply)
+        void rrdb_service_impl::on_get(const ::dsn::blob& key, ::dsn::service::rpc_replier<read_response>& reply)
         {
+            read_response resp;
+
             if (!_is_open)
             {
                 rocksdb::Slice skey(key.data(), key.length());
-                std::string value;
-                rocksdb::Status status = _db->Get(_rd_opts, skey, &value);
-                if (status.ok())
-                {
-                    // copy value to resp
-                }
-
-                // TODO: add error code to response type
-                //reply(status.code());
+                rocksdb::Status status = _db->Get(_rd_opts, skey, &resp.value);
+                resp.error = status.code();
             }
             else
             {
-                //reply(ERR_SERVICE_NOT_ACTIVE);
+                resp.error = ERR_SERVICE_NOT_ACTIVE;
             }
+            reply(resp);
         }
 
         int  rrdb_service_impl::open(bool create_new)
@@ -94,8 +84,6 @@ namespace dsn {
             auto status = rocksdb::DB::Open(opts, dir() + "/rdb", &_db);
             if (status.ok())
             {
-                _last_committed_decree = _last_durable_decree 
-                    = static_cast<int64_t>(_db->GetLatestSequenceNumber());
                 _is_open = true;
             }
 
@@ -122,22 +110,45 @@ namespace dsn {
             opts.wait = force;
 
             auto status = _db->Flush(opts);
+            if (status.ok() && force)
+            {
+                
+            }
             return status.code();
         }
 
-        void rrdb_service_impl::prepare_learning_request(__out_param blob& learnRequest)
+        void rrdb_service_impl::prepare_learning_request(__out_param blob& learn_req)
         {
-
+            // nothing to do
         }
 
-        int  rrdb_service_impl::get_learn_state(::dsn::replication::decree start, const blob& learnRequest, __out_param::dsn::replication::learn_state& state)
+        int  rrdb_service_impl::get_learn_state(
+            ::dsn::replication::decree start, 
+            const blob& learn_req, 
+            __out_param::dsn::replication::learn_state& state)
         {
+
+
             return 0;
         }
 
         int  rrdb_service_impl::apply_learn_state(::dsn::replication::learn_state& state)
         {
             return 0;
+        }
+
+        ::dsn::replication::decree rrdb_service_impl::last_committed_decree() const
+        {
+            if (_is_open)
+                return _db->GetLatestSequenceNumber();
+            else
+                return 0;
+        }
+
+        ::dsn::replication::decree rrdb_service_impl::last_durable_decree() const
+        {
+            // TODO: disable logging, return L1 last committed decree
+            return last_committed_decree();
         }
     }
 }

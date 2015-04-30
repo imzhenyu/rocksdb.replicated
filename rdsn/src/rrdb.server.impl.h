@@ -13,14 +13,16 @@ namespace dsn {
             virtual void on_put(const update_request& update, ::dsn::service::rpc_replier<int>& reply);
             virtual void on_remove(const ::dsn::blob& key, ::dsn::service::rpc_replier<int>& reply);
             virtual void on_merge(const update_request& update, ::dsn::service::rpc_replier<int>& reply);
-            virtual void on_get(const ::dsn::blob& key, ::dsn::service::rpc_replier<::dsn::blob>& reply);
+            virtual void on_get(const ::dsn::blob& key, ::dsn::service::rpc_replier<read_response>& reply);
 
             virtual int  open(bool create_new);
             virtual int  close(bool clear_state);
             virtual int  flush(bool force);
-            virtual void prepare_learning_request(__out_param blob& learnRequest);
-            virtual int  get_learn_state(::dsn::replication::decree start, const blob& learnRequest, __out_param::dsn::replication::learn_state& state);
+            virtual void prepare_learning_request(__out_param blob& learn_req);
+            virtual int  get_learn_state(::dsn::replication::decree start, const blob& learn_req, __out_param::dsn::replication::learn_state& state);
             virtual int  apply_learn_state(::dsn::replication::learn_state& state);
+            virtual ::dsn::replication::decree last_committed_decree() const;
+            virtual ::dsn::replication::decree last_durable_decree() const;
 
         private:
             rocksdb::DB           *_db;

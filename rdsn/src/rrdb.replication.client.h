@@ -277,11 +277,11 @@ public:
 	// - synchronous 
 	::dsn::error_code get(
 		const ::dsn::blob& key, 
-		__out_param ::dsn::blob& resp, 
+		__out_param read_response& resp, 
 		int timeout_milliseconds = 0
 		)
 	{
-		auto resp_task = ::dsn::replication::replication_app_client_base::read<::dsn::blob, ::dsn::blob>(
+		auto resp_task = ::dsn::replication::replication_app_client_base::read<::dsn::blob, read_response>(
             get_partition_index(key),
             RPC_RRDB_RRDB_GET,
             key,
@@ -297,7 +297,7 @@ public:
 		return resp_task->error();
 	}
 	
-	// - asynchronous with on-stack ::dsn::blob and ::dsn::blob 
+	// - asynchronous with on-stack ::dsn::blob and read_response 
 	::dsn::rpc_response_task_ptr begin_get(
 		const ::dsn::blob& key, 		
 		int timeout_milliseconds = 0, 
@@ -317,7 +317,7 @@ public:
 
 	virtual void end_get(
 		::dsn::error_code err, 
-		const ::dsn::blob& resp)
+		const read_response& resp)
 	{
 		if (err != ::dsn::ERR_SUCCESS) std::cout << "reply RPC_RRDB_RRDB_GET err : " << err.to_string() << std::endl;
 		else
@@ -326,14 +326,14 @@ public:
 		}
 	}
 	
-	// - asynchronous with on-heap std::shared_ptr<::dsn::blob> and std::shared_ptr<::dsn::blob> 
+	// - asynchronous with on-heap std::shared_ptr<::dsn::blob> and std::shared_ptr<read_response> 
 	::dsn::rpc_response_task_ptr begin_get2(
 		std::shared_ptr<::dsn::blob>& key, 		
 		int timeout_milliseconds = 0, 
 		int reply_hash = 0
 		)
 	{
-		return ::dsn::replication::replication_app_client_base::read<rrdb_client, ::dsn::blob, ::dsn::blob>(
+		return ::dsn::replication::replication_app_client_base::read<rrdb_client, ::dsn::blob, read_response>(
             get_partition_index(*key),
             RPC_RRDB_RRDB_GET,
             key,
@@ -347,7 +347,7 @@ public:
 	virtual void end_get2(
 		::dsn::error_code err, 
 		std::shared_ptr<::dsn::blob>& key, 
-		std::shared_ptr<::dsn::blob>& resp)
+		std::shared_ptr<read_response>& resp)
 	{
 		if (err != ::dsn::ERR_SUCCESS) std::cout << "reply RPC_RRDB_RRDB_GET err : " << err.to_string() << std::endl;
 		else

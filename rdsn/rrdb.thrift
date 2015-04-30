@@ -12,7 +12,7 @@ struct update_request
 struct read_response
 {
     1:int      error;
-    2:dsn.blob value;
+    2:string   value;
 }
 
 service rrdb
