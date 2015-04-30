@@ -17,7 +17,7 @@ namespace dsn {
 
             virtual int  open(bool create_new);
             virtual int  close(bool clear_state);
-            virtual int  compact(bool force);
+            virtual int  flush(bool force);
             virtual void prepare_learning_request(__out_param blob& learnRequest);
             virtual int  get_learn_state(::dsn::replication::decree start, const blob& learnRequest, __out_param::dsn::replication::learn_state& state);
             virtual int  apply_learn_state(::dsn::replication::learn_state& state);
