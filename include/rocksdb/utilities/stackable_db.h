@@ -213,6 +213,10 @@ class StackableDB : public DB {
     return db_->GetLatestSequenceNumber();
   }
 
+  virtual SequenceNumber GetLatestDurableSequenceNumber() const override {
+    return db_->GetLatestDurableSequenceNumber();
+  }
+  
   virtual Status GetSortedWalFiles(VectorLogPtr& files) override {
     return db_->GetSortedWalFiles(files);
   }

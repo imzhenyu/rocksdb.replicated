@@ -18,6 +18,7 @@
 #include <stdint.h>
 #include <unordered_map>
 
+#include "rocksdb/types.h"
 #include "rocksdb/version.h"
 #include "rocksdb/listener.h"
 #include "rocksdb/universal_compaction.h"

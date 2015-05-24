@@ -45,9 +45,15 @@ public:
 
 	void on_test_timer()
 	{
+        ::dsn::blob key("key", 0, 3);
+        ::dsn::blob value("value", 0, 5);
+
 		// test for service 'rrdb'
 		{
-			update_request req;
+            update_request req;
+            req.key = key;
+            req.value = value;
+
 			//sync:
 			int resp;
 			auto err = _rrdb_client->put(req, resp);
@@ -57,7 +63,7 @@ public:
            
 		}
 		{
-			::dsn::blob req;
+			::dsn::blob req  = key;
 			//sync:
 			int resp;
 			auto err = _rrdb_client->remove(req, resp);
@@ -68,6 +74,9 @@ public:
 		}
 		{
 			update_request req;
+            req.key = key;
+            req.value = value;
+
 			//sync:
 			int resp;
 			auto err = _rrdb_client->merge(req, resp);
@@ -77,7 +86,7 @@ public:
            
 		}
 		{
-			::dsn::blob req;
+			::dsn::blob req = key;
 			//sync:
 			read_response resp;
 			auto err = _rrdb_client->get(req, resp);

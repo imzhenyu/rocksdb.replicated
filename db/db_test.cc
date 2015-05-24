@@ -8768,6 +8768,7 @@ class ModelDB: public DB {
   }
 
   virtual SequenceNumber GetLatestSequenceNumber() const override { return 0; }
+  virtual SequenceNumber GetLatestDurableSequenceNumber() const override { return 0; }
   virtual Status GetUpdatesSince(
       rocksdb::SequenceNumber, unique_ptr<rocksdb::TransactionLogIterator>*,
       const TransactionLogIterator::ReadOptions&
