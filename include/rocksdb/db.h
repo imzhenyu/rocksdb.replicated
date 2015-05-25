@@ -502,6 +502,9 @@ class DB {
   // The sequence number of the most recent transaction.
   virtual SequenceNumber GetLatestSequenceNumber() const = 0;
 
+  // The sequence number of the most recent and flushed transaction
+  virtual SequenceNumber GetLatestDurableSequenceNumber() const = 0;
+
 #ifndef ROCKSDB_LITE
 
   // Prevent file deletions. Compactions will continue to occur,

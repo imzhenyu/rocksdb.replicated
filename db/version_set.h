@@ -585,6 +585,11 @@ class VersionSet {
     return last_sequence_.load(std::memory_order_acquire);
   }
 
+  // Return the last durable sequence number.
+  uint64_t LastDurableSequence() const {
+      return last_durable_sequence_.load(std::memory_order_acquire);
+  }
+
   // Set the last sequence number to s.
   void SetLastSequence(uint64_t s) {
     assert(s >= last_sequence_);
@@ -677,6 +682,7 @@ class VersionSet {
   uint64_t manifest_file_number_;
   uint64_t pending_manifest_file_number_;
   std::atomic<uint64_t> last_sequence_;
+  std::atomic<uint64_t> last_durable_sequence_;
   uint64_t prev_log_number_;  // 0 or backing store for memtable being compacted
 
   // Opened lazily

@@ -27,7 +27,8 @@ public:
 	::dsn::error_code put(
 		const update_request& update, 
 		__out_param int& resp, 
-		int timeout_milliseconds = 0
+		int timeout_milliseconds = 0, 
+		::dsn::replication::read_semantic_t read_semantic = ::dsn::replication::read_semantic_t::ReadLastUpdate 
 		)
 	{
 		auto resp_task = ::dsn::replication::replication_app_client_base::read<update_request, int>(
@@ -36,7 +37,10 @@ public:
             update,
             nullptr,
             nullptr,
-            timeout_milliseconds
+			nullptr,
+            timeout_milliseconds,
+			0, 
+			read_semantic 
             );
 		resp_task->wait();
 		if (resp_task->error() == ::dsn::ERR_SUCCESS)
@@ -48,9 +52,11 @@ public:
 	
 	// - asynchronous with on-stack update_request and int 
 	::dsn::rpc_response_task_ptr begin_put(
-		const update_request& update, 		
+		const update_request& update,
+		void* context = nullptr,
 		int timeout_milliseconds = 0, 
-		int reply_hash = 0
+		int reply_hash = 0,  
+		::dsn::replication::read_semantic_t read_semantic = ::dsn::replication::read_semantic_t::ReadLastUpdate 
 		)
 	{
 		return ::dsn::replication::replication_app_client_base::read<rrdb_client, update_request, int>(
@@ -59,14 +65,17 @@ public:
             update,
             this,
             &rrdb_client::end_put, 
+			context,
             timeout_milliseconds,
-			reply_hash
+			reply_hash, 
+			read_semantic 
             );
 	}
 
 	virtual void end_put(
 		::dsn::error_code err, 
-		const int& resp)
+		const int& resp,
+		void* context)
 	{
 		if (err != ::dsn::ERR_SUCCESS) std::cout << "reply RPC_RRDB_RRDB_PUT err : " << err.to_string() << std::endl;
 		else
@@ -79,7 +88,8 @@ public:
 	::dsn::rpc_response_task_ptr begin_put2(
 		std::shared_ptr<update_request>& update, 		
 		int timeout_milliseconds = 0, 
-		int reply_hash = 0
+		int reply_hash = 0, 
+		::dsn::replication::read_semantic_t read_semantic = ::dsn::replication::read_semantic_t::ReadLastUpdate 
 		)
 	{
 		return ::dsn::replication::replication_app_client_base::read<rrdb_client, update_request, int>(
@@ -89,7 +99,8 @@ public:
             this,
             &rrdb_client::end_put2, 
             timeout_milliseconds,
-			reply_hash
+			reply_hash, 
+			read_semantic 
             );
 	}
 
@@ -111,7 +122,8 @@ public:
 	::dsn::error_code remove(
 		const ::dsn::blob& key, 
 		__out_param int& resp, 
-		int timeout_milliseconds = 0
+		int timeout_milliseconds = 0, 
+		::dsn::replication::read_semantic_t read_semantic = ::dsn::replication::read_semantic_t::ReadLastUpdate 
 		)
 	{
 		auto resp_task = ::dsn::replication::replication_app_client_base::read<::dsn::blob, int>(
@@ -120,7 +132,10 @@ public:
             key,
             nullptr,
             nullptr,
-            timeout_milliseconds
+			nullptr,
+            timeout_milliseconds,
+			0, 
+			read_semantic 
             );
 		resp_task->wait();
 		if (resp_task->error() == ::dsn::ERR_SUCCESS)
@@ -132,9 +147,11 @@ public:
 	
 	// - asynchronous with on-stack ::dsn::blob and int 
 	::dsn::rpc_response_task_ptr begin_remove(
-		const ::dsn::blob& key, 		
+		const ::dsn::blob& key,
+		void* context = nullptr,
 		int timeout_milliseconds = 0, 
-		int reply_hash = 0
+		int reply_hash = 0,  
+		::dsn::replication::read_semantic_t read_semantic = ::dsn::replication::read_semantic_t::ReadLastUpdate 
 		)
 	{
 		return ::dsn::replication::replication_app_client_base::read<rrdb_client, ::dsn::blob, int>(
@@ -143,14 +160,17 @@ public:
             key,
             this,
             &rrdb_client::end_remove, 
+			context,
             timeout_milliseconds,
-			reply_hash
+			reply_hash, 
+			read_semantic 
             );
 	}
 
 	virtual void end_remove(
 		::dsn::error_code err, 
-		const int& resp)
+		const int& resp,
+		void* context)
 	{
 		if (err != ::dsn::ERR_SUCCESS) std::cout << "reply RPC_RRDB_RRDB_REMOVE err : " << err.to_string() << std::endl;
 		else
@@ -163,7 +183,8 @@ public:
 	::dsn::rpc_response_task_ptr begin_remove2(
 		std::shared_ptr<::dsn::blob>& key, 		
 		int timeout_milliseconds = 0, 
-		int reply_hash = 0
+		int reply_hash = 0, 
+		::dsn::replication::read_semantic_t read_semantic = ::dsn::replication::read_semantic_t::ReadLastUpdate 
 		)
 	{
 		return ::dsn::replication::replication_app_client_base::read<rrdb_client, ::dsn::blob, int>(
@@ -173,7 +194,8 @@ public:
             this,
             &rrdb_client::end_remove2, 
             timeout_milliseconds,
-			reply_hash
+			reply_hash, 
+			read_semantic 
             );
 	}
 
@@ -195,7 +217,8 @@ public:
 	::dsn::error_code merge(
 		const update_request& update, 
 		__out_param int& resp, 
-		int timeout_milliseconds = 0
+		int timeout_milliseconds = 0, 
+		::dsn::replication::read_semantic_t read_semantic = ::dsn::replication::read_semantic_t::ReadLastUpdate 
 		)
 	{
 		auto resp_task = ::dsn::replication::replication_app_client_base::read<update_request, int>(
@@ -204,7 +227,10 @@ public:
             update,
             nullptr,
             nullptr,
-            timeout_milliseconds
+			nullptr,
+            timeout_milliseconds,
+			0, 
+			read_semantic 
             );
 		resp_task->wait();
 		if (resp_task->error() == ::dsn::ERR_SUCCESS)
@@ -216,9 +242,11 @@ public:
 	
 	// - asynchronous with on-stack update_request and int 
 	::dsn::rpc_response_task_ptr begin_merge(
-		const update_request& update, 		
+		const update_request& update,
+		void* context = nullptr,
 		int timeout_milliseconds = 0, 
-		int reply_hash = 0
+		int reply_hash = 0,  
+		::dsn::replication::read_semantic_t read_semantic = ::dsn::replication::read_semantic_t::ReadLastUpdate 
 		)
 	{
 		return ::dsn::replication::replication_app_client_base::read<rrdb_client, update_request, int>(
@@ -227,14 +255,17 @@ public:
             update,
             this,
             &rrdb_client::end_merge, 
+			context,
             timeout_milliseconds,
-			reply_hash
+			reply_hash, 
+			read_semantic 
             );
 	}
 
 	virtual void end_merge(
 		::dsn::error_code err, 
-		const int& resp)
+		const int& resp,
+		void* context)
 	{
 		if (err != ::dsn::ERR_SUCCESS) std::cout << "reply RPC_RRDB_RRDB_MERGE err : " << err.to_string() << std::endl;
 		else
@@ -247,7 +278,8 @@ public:
 	::dsn::rpc_response_task_ptr begin_merge2(
 		std::shared_ptr<update_request>& update, 		
 		int timeout_milliseconds = 0, 
-		int reply_hash = 0
+		int reply_hash = 0, 
+		::dsn::replication::read_semantic_t read_semantic = ::dsn::replication::read_semantic_t::ReadLastUpdate 
 		)
 	{
 		return ::dsn::replication::replication_app_client_base::read<rrdb_client, update_request, int>(
@@ -257,7 +289,8 @@ public:
             this,
             &rrdb_client::end_merge2, 
             timeout_milliseconds,
-			reply_hash
+			reply_hash, 
+			read_semantic 
             );
 	}
 
@@ -279,7 +312,8 @@ public:
 	::dsn::error_code get(
 		const ::dsn::blob& key, 
 		__out_param read_response& resp, 
-		int timeout_milliseconds = 0
+		int timeout_milliseconds = 0, 
+		::dsn::replication::read_semantic_t read_semantic = ::dsn::replication::read_semantic_t::ReadLastUpdate 
 		)
 	{
 		auto resp_task = ::dsn::replication::replication_app_client_base::read<::dsn::blob, read_response>(
@@ -288,7 +322,10 @@ public:
             key,
             nullptr,
             nullptr,
-            timeout_milliseconds
+			nullptr,
+            timeout_milliseconds,
+			0, 
+			read_semantic 
             );
 		resp_task->wait();
 		if (resp_task->error() == ::dsn::ERR_SUCCESS)
@@ -300,9 +337,11 @@ public:
 	
 	// - asynchronous with on-stack ::dsn::blob and read_response 
 	::dsn::rpc_response_task_ptr begin_get(
-		const ::dsn::blob& key, 		
+		const ::dsn::blob& key,
+		void* context = nullptr,
 		int timeout_milliseconds = 0, 
-		int reply_hash = 0
+		int reply_hash = 0,  
+		::dsn::replication::read_semantic_t read_semantic = ::dsn::replication::read_semantic_t::ReadLastUpdate 
 		)
 	{
 		return ::dsn::replication::replication_app_client_base::read<rrdb_client, ::dsn::blob, read_response>(
@@ -311,14 +350,17 @@ public:
             key,
             this,
             &rrdb_client::end_get, 
+			context,
             timeout_milliseconds,
-			reply_hash
+			reply_hash, 
+			read_semantic 
             );
 	}
 
 	virtual void end_get(
 		::dsn::error_code err, 
-		const read_response& resp)
+		const read_response& resp,
+		void* context)
 	{
 		if (err != ::dsn::ERR_SUCCESS) std::cout << "reply RPC_RRDB_RRDB_GET err : " << err.to_string() << std::endl;
 		else
@@ -331,7 +373,8 @@ public:
 	::dsn::rpc_response_task_ptr begin_get2(
 		std::shared_ptr<::dsn::blob>& key, 		
 		int timeout_milliseconds = 0, 
-		int reply_hash = 0
+		int reply_hash = 0, 
+		::dsn::replication::read_semantic_t read_semantic = ::dsn::replication::read_semantic_t::ReadLastUpdate 
 		)
 	{
 		return ::dsn::replication::replication_app_client_base::read<rrdb_client, ::dsn::blob, read_response>(
@@ -341,7 +384,8 @@ public:
             this,
             &rrdb_client::end_get2, 
             timeout_milliseconds,
-			reply_hash
+			reply_hash, 
+			read_semantic 
             );
 	}
 

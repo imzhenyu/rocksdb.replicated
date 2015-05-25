@@ -155,6 +155,7 @@ class DBImpl : public DB {
                        ColumnFamilyHandle* column_family) override;
 
   virtual SequenceNumber GetLatestSequenceNumber() const override;
+  virtual SequenceNumber GetLatestDurableSequenceNumber() const override;
 
 #ifndef ROCKSDB_LITE
   virtual Status DisableFileDeletions() override;

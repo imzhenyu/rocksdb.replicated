@@ -7,8 +7,8 @@ namespace dsn { namespace apps {
 class rrdb_client_app : public ::dsn::service::service_app, public virtual ::dsn::service::servicelet
 {
 public:
-	rrdb_client_app(::dsn::service_app_spec* s, ::dsn::configuration_ptr c) 
-		: ::dsn::service::service_app(s, c) 
+	rrdb_client_app(::dsn::service_app_spec* s) 
+		: ::dsn::service::service_app(s) 
 	{
 		_rrdb_client = nullptr;
 	}
@@ -24,7 +24,7 @@ public:
 			return ::dsn::ERR_INVALID_PARAMETERS;
 
 		std::vector<::dsn::end_point> meta_servers;
-		auto cf = ::dsn::service::service_app::config();
+		auto cf = ::dsn::service::system::config();
 		::dsn::replication::replication_app_client_base::load_meta_servers(cf, meta_servers);
 		
 		_rrdb_client = new rrdb_client(meta_servers, argv[1]);

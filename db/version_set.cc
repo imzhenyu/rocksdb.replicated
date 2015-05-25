@@ -1726,6 +1726,7 @@ VersionSet::VersionSet(const std::string& dbname, const DBOptions* db_options,
       manifest_file_number_(0),  // Filled by Recover()
       pending_manifest_file_number_(0),
       last_sequence_(0),
+      last_durable_sequence_(0),
       prev_log_number_(0),
       current_version_number_(0),
       manifest_file_size_(0),
@@ -1992,6 +1993,7 @@ Status VersionSet::LogAndApply(ColumnFamilyData* column_family_data,
     manifest_file_number_ = pending_manifest_file_number_;
     manifest_file_size_ = new_manifest_file_size;
     prev_log_number_ = edit->prev_log_number_;
+    last_durable_sequence_ = edit->last_sequence;
   } else {
     Log(InfoLogLevel::ERROR_LEVEL, db_options_->info_log,
         "Error in committing version %lu to [%s]",
@@ -2322,6 +2324,7 @@ Status VersionSet::Recover(
     manifest_file_size_ = current_manifest_file_size;
     next_file_number_.store(next_file + 1);
     last_sequence_ = last_sequence;
+    last_durable_sequence_ = last_sequence;
     prev_log_number_ = previous_log_number;
 
     Log(InfoLogLevel::INFO_LEVEL, db_options_->info_log,
@@ -2676,6 +2679,7 @@ Status VersionSet::DumpManifest(Options& options, std::string& dscname,
 
     next_file_number_.store(next_file + 1);
     last_sequence_ = last_sequence;
+    last_durable_sequence_ = last_sequence;
     prev_log_number_ = previous_log_number;
 
     printf(

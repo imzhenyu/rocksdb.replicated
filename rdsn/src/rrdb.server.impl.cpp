@@ -7,17 +7,23 @@ namespace dsn {
             : rrdb_service(replica, config)
         {
             _is_open = false;
-            memset(&_wt_opts, 0, sizeof(_wt_opts));
-            memset(&_rd_opts, 0, sizeof(_rd_opts));
+
+            //
+            // disable write ahead logging as replication handles logging instead now
+            //
+            _wt_opts.disableWAL = true;
         }
 
         void rrdb_service_impl::on_put(const update_request& update, ::dsn::service::rpc_replier<int>& reply)
         {
-            if (!_is_open)
+            if (_is_open)
             {
+                rocksdb::WriteOptions opts = _wt_opts;
+                opts.given_sequence_number = static_cast<rocksdb::SequenceNumber>(_last_committed_decree + 1);
+
                 rocksdb::Slice skey(update.key.data(), update.key.length());
                 rocksdb::Slice svalue(update.value.data(), update.value.length());
-                rocksdb::Status status = _db->Put(_wt_opts, skey, svalue);
+                rocksdb::Status status = _db->Put(opts, skey, svalue);
                 reply(status.code());
             }
             else
@@ -28,10 +34,13 @@ namespace dsn {
 
         void rrdb_service_impl::on_remove(const ::dsn::blob& key, ::dsn::service::rpc_replier<int>& reply)
         {
-            if (!_is_open)
+            if (_is_open)
             {
+                rocksdb::WriteOptions opts = _wt_opts;
+                opts.given_sequence_number = static_cast<rocksdb::SequenceNumber>(_last_committed_decree + 1);
+
                 rocksdb::Slice skey(key.data(), key.length());
-                rocksdb::Status status = _db->Delete(_wt_opts, skey);
+                rocksdb::Status status = _db->Delete(opts, skey);
                 reply(status.code());
             }
             else
@@ -42,11 +51,14 @@ namespace dsn {
 
         void rrdb_service_impl::on_merge(const update_request& update, ::dsn::service::rpc_replier<int>& reply)
         {
-            if (!_is_open)
+            if (_is_open)
             {
+                rocksdb::WriteOptions opts = _wt_opts;
+                opts.given_sequence_number = static_cast<rocksdb::SequenceNumber>(_last_committed_decree + 1);
+
                 rocksdb::Slice skey(update.key.data(), update.key.length());
                 rocksdb::Slice svalue(update.value.data(), update.value.length());
-                rocksdb::Status status = _db->Merge(_wt_opts, skey, svalue);
+                rocksdb::Status status = _db->Merge(opts, skey, svalue);
                 reply(status.code());
             }
             else
@@ -59,7 +71,7 @@ namespace dsn {
         {
             read_response resp;
 
-            if (!_is_open)
+            if (_is_open)
             {
                 rocksdb::Slice skey(key.data(), key.length());
                 rocksdb::Status status = _db->Get(_rd_opts, skey, &resp.value);
@@ -110,10 +122,6 @@ namespace dsn {
             opts.wait = force;
 
             auto status = _db->Flush(opts);
-            if (status.ok() && force)
-            {
-                
-            }
             return status.code();
         }
 
@@ -147,8 +155,10 @@ namespace dsn {
 
         ::dsn::replication::decree rrdb_service_impl::last_durable_decree() const
         {
-            // TODO: disable logging, return L1 last committed decree
-            return last_committed_decree();
+            if (_is_open)
+                return _db->GetLatestDurableSequenceNumber();
+            else
+                return 0;
         }
     }
 }
