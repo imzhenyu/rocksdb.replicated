@@ -1856,11 +1856,12 @@ Status DBImpl::GetLearningMemTableState(
     Arena ar;
     WriteBatch batch;
     SequenceNumber maxSeq = 0;
+    Slice lastUserKey;
     
     mem->Ref();
     auto it = mem->NewIterator(opts, &ar);
     it->SeekToFirst();
-    while (it->Valid())
+    for (; it->Valid(); it->Next())
     {
         // iterator order: <user-key, seq-no(desending), type>
         // each key() is an AppendInternalKey
@@ -1872,6 +1873,14 @@ Status DBImpl::GetLearningMemTableState(
 
         if (pkey.sequence < start)
             continue;
+
+        if (!lastUserKey.empty() && 0 == cfd->user_comparator()->Compare(
+            lastUserKey,
+            pkey.user_key
+            ))
+            continue;
+
+        lastUserKey = pkey.user_key;
 
         if (pkey.sequence > maxSeq)
             maxSeq = pkey.sequence;
@@ -1890,8 +1899,6 @@ Status DBImpl::GetLearningMemTableState(
         default:
             assert(false);
         }
-
-        it->Next();
     }
 
     mem->Unref();

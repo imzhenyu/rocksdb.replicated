@@ -329,7 +329,8 @@ void MemTable::Add(SequenceNumber s, ValueType type,
   }
 
   // The first sequence number inserted into the memtable
-  assert(first_seqno_ == 0 || s > first_seqno_);
+  //assert(first_seqno_ == 0 || s > first_seqno_);
+  assert(first_seqno_ == 0 || s >= first_seqno_); // == when seqno is shared in batch
   if (first_seqno_ == 0) {
     first_seqno_ = s;
   }

@@ -67,11 +67,11 @@ public:
            
 		}
 		{
-			update_request req;
+			//update_request req;
 			//sync:
-			int resp;
-			auto err = _rrdb_client->merge(req, resp);
-			std::cout << "call RPC_RRDB_RRDB_MERGE end, return " << err.to_string() << std::endl;
+			//int resp;
+			//auto err = _rrdb_client->merge(req, resp);
+			//std::cout << "call RPC_RRDB_RRDB_MERGE end, return " << err.to_string() << std::endl;
 			//async: 
 			//_rrdb_client->begin_merge(req);
            

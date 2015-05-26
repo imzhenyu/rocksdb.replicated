@@ -187,7 +187,7 @@ namespace dsn {
                 if (status.ok())
                 {
                     printf("ApplyLeraningState lastcommitted in DB %lu, result %lu\n",
-                        _last_committed_decree,
+                        _last_committed_decree.load(),
                         end
                         );
                     _last_committed_decree = end;
