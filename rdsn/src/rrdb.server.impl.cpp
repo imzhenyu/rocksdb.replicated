@@ -135,13 +135,17 @@ namespace dsn {
             const blob& learn_req, 
             __out_param::dsn::replication::learn_state& state)
         {
-
+            if (!_is_open)
+                return ERR_SERVICE_NOT_ACTIVE;
 
             return 0;
         }
 
         int  rrdb_service_impl::apply_learn_state(::dsn::replication::learn_state& state)
         {
+            if (!_is_open)
+                return ERR_SERVICE_NOT_ACTIVE;
+
             return 0;
         }
         

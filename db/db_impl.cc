@@ -1685,6 +1685,44 @@ SequenceNumber DBImpl::GetLatestDurableSequenceNumber() const {
     return versions_->LastDurableSequence();
 }
 
+// get delta state for learner (start, infinite)
+bool DBImpl::GetLearningState(SequenceNumber start,
+    /*out*/ std::string& mem_state,
+    /*out*/ std::string& edit,
+    /*out*/ std::vector<uint64_t>& sstables
+    )
+{
+    // all state := mem_table +(l0seq) level 0 + (l1seq) (level 1+)+
+    SequenceNumber l0seq = versions_->last_durable_sequence_;
+
+    // only learn mem_table state is enough
+    if (start >= l0seq)
+    {
+
+    }
+
+    // need to learn sstable files
+    else
+    {
+        
+    }
+
+    return false;
+}
+
+// apply delta state for learnee (start, infinite)
+bool DBImpl::ApplyLearningState(
+    SequenceNumber start,
+    const std::string& mem_state,
+    const std::string& edit,
+    const std::vector<uint64_t>& sstables
+    )
+{
+    // all state := mem_table + level 0 + (level 1+)+
+
+    return false;
+}
+
 Status DBImpl::RunManualCompaction(ColumnFamilyData* cfd, int input_level,
                                    int output_level, uint32_t output_path_id,
                                    const Slice* begin, const Slice* end) {

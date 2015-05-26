@@ -503,7 +503,30 @@ class DB {
   virtual SequenceNumber GetLatestSequenceNumber() const = 0;
 
   // The sequence number of the most recent and flushed transaction
-  virtual SequenceNumber GetLatestDurableSequenceNumber() const = 0;
+  virtual SequenceNumber GetLatestDurableSequenceNumber() const {
+      return 0;
+  }
+
+  // get delta state for learner (start, infinite)
+  virtual bool GetLearningState(SequenceNumber start, 
+      /*out*/ std::string& mem_state, 
+      /*out*/ std::string& edit,
+      /*out*/ std::vector<uint64_t>& sstables
+      ) 
+  { 
+      return false; 
+  }
+
+  // apply delta state for learnee (start, infinite)
+  virtual bool ApplyLearningState(
+      SequenceNumber start,
+      const std::string& mem_state,
+      const std::string& edit,
+      const std::vector<uint64_t>& sstables      
+      )
+  { 
+      return false; 
+  }
 
 #ifndef ROCKSDB_LITE
 
