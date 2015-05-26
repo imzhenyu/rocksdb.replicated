@@ -146,10 +146,16 @@ namespace dsn {
                 binary_writer writer;
                 writer.write(start);
                 writer.write(edit);
+                bool has_meta = mem_state.size() > 0;
+                writer.write(has_meta);
                 state.meta.push_back(writer.get_buffer());
-             
-                blob ms(std::shared_ptr<char>(mem_state.data()), mem_state.size());
-                state.meta.push_back(ms);
+           
+                if (has_meta)
+                {
+                    std::shared_ptr<char> p((char*)mem_state.data());
+                    blob ms(p, static_cast<int>(mem_state.size()));
+                    state.meta.push_back(ms);
+                }
             }
 
             return status.code();
@@ -163,9 +169,11 @@ namespace dsn {
             binary_reader reader(state.meta[0]);
             rocksdb::SequenceNumber start;
             std::string edit;
+            bool has_meta;
 
             reader.read(start);
             reader.read(edit);
+            reader.read(has_meta);
 
             rocksdb::Slice mem_state(state.meta[1].data(), state.meta[1].length());
 

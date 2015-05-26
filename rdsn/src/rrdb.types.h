@@ -19,7 +19,7 @@
 
 namespace dsn { namespace apps { 
 	// ---------- update_request -------------
-	inline void marshall(::dsn::binary_writer& writer, const update_request& val)
+	inline void marshall(::dsn::binary_writer& writer, const update_request& val, uint16_t pos = 0xffff)
 	{
 		boost::shared_ptr<::dsn::binary_writer_transport> transport(new ::dsn::binary_writer_transport(writer));
 		::apache::thrift::protocol::TBinaryProtocol proto(transport);
@@ -34,7 +34,7 @@ namespace dsn { namespace apps {
 	};
 
 	// ---------- read_response -------------
-	inline void marshall(::dsn::binary_writer& writer, const read_response& val)
+	inline void marshall(::dsn::binary_writer& writer, const read_response& val, uint16_t pos = 0xffff)
 	{
 		boost::shared_ptr<::dsn::binary_writer_transport> transport(new ::dsn::binary_writer_transport(writer));
 		::apache::thrift::protocol::TBinaryProtocol proto(transport);
@@ -61,10 +61,10 @@ namespace dsn { namespace apps {
 		::dsn::blob value;
 	};
 
-	inline void marshall(::dsn::binary_writer& writer, const update_request& val)
+	inline void marshall(::dsn::binary_writer& writer, const update_request& val, uint16_t pos = 0xffff)
 	{
-		marshall(writer, val.key);
-		marshall(writer, val.value);
+		marshall(writer, val.key, pos);
+		marshall(writer, val.value, pos);
 	};
 
 	inline void unmarshall(::dsn::binary_reader& reader, __out_param update_request& val)
@@ -80,10 +80,10 @@ namespace dsn { namespace apps {
 		std::string value;
 	};
 
-	inline void marshall(::dsn::binary_writer& writer, const read_response& val)
+	inline void marshall(::dsn::binary_writer& writer, const read_response& val, uint16_t pos = 0xffff)
 	{
-		marshall(writer, val.error);
-		marshall(writer, val.value);
+		marshall(writer, val.error, pos);
+		marshall(writer, val.value, pos);
 	};
 
 	inline void unmarshall(::dsn::binary_reader& reader, __out_param read_response& val)

@@ -26,3 +26,22 @@ $tmp2 = $tmp->add_function("rrdb.read_response", "get");
 $tmp2->add_param("key", "dsn.blob");
 
 ?>
+<?php
+$_PROG->add_annotations(Array(
+	"service.rrdb" => Array(
+		"stateful" => "1",
+	),
+	"function.rrdb.put" => Array(
+		"write" => "1",
+	),
+	"function.rrdb.remove" => Array(
+		"write" => "1",
+	),
+	"function.rrdb.merge" => Array(
+		"write" => "1",
+	),
+	"function.rrdb.get" => Array(
+		"write" => "",
+	),
+));
+?>

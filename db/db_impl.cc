@@ -1699,10 +1699,17 @@ Status DBImpl::GetLearningState(SequenceNumber start,
     ColumnFamilyData* cfd = versions_->column_family_set_->GetDefault();
 
     // invalid 
-    if (start >= versions_->last_sequence_)
+    if (start > versions_->last_sequence_)
     {
         mutex_.Unlock();
         return Status::InvalidArgument("Invalid start sequence which is larger than learnee's latest one");
+    }
+
+    // learning complete
+    else if (start == versions_->last_sequence_)
+    {
+        mutex_.Unlock();
+        return Status::OK();
     }
 
     // only learn mem_table state is enough
@@ -1720,7 +1727,6 @@ Status DBImpl::GetLearningState(SequenceNumber start,
         MemTable *mem = cfd->mem();
         ReadOptions opts;
         Arena ar;
-        auto& cmp = mem->GetInternalKeyComparator();
         std::stringstream ss;
 
         // allocate buffer for copy memtable entries
@@ -1748,7 +1754,7 @@ Status DBImpl::GetLearningState(SequenceNumber start,
                 Slice kv = it->Entry();
 
                 // resize buffer when necessary
-                while (pend - p < kv.size() + sizeof(int32_t))
+                while ((size_t)(pend - p) < kv.size() + sizeof(int32_t))
                 {
                     buffer_size = buffer_size * 3 / 2;
                                         
@@ -1862,8 +1868,7 @@ Status DBImpl::ApplyLearningState(
     // apply memory state
     if (mem_state.size() > 0)
     {
-        MemTable *mem = cfd->mem();
-        char* p = mem_state.data();
+        char* p = (char*)mem_state.data();
         char* pend = p + mem_state.size();
         WriteOptions opts;
         opts.disableWAL = true;
@@ -3423,6 +3428,7 @@ Status DBImpl::Write(const WriteOptions& write_options, WriteBatch* my_batch) {
   }
 
   uint64_t last_sequence = versions_->LastSequence();
+  printf ("versions_->LastSeq = %lu, given = %lu\n", last_sequence, write_options.given_sequence_number);
   WriteThread::Writer* last_writer = &w;
   if (status.ok()) {
     autovector<WriteBatch*> write_batch_group;
