@@ -87,7 +87,7 @@ class WriteBatchInternal {
 
   // Store the specified number as the seqeunce number for the start of
   // this batch.
-  static void SetSequence(WriteBatch* batch, SequenceNumber seq, bool shared);
+  static void SetSequence(WriteBatch* batch, SequenceNumber seq, bool shared = false);
 
   static Slice Contents(const WriteBatch* batch) {
     return Slice(batch->rep_);
