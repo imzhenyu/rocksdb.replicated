@@ -1698,6 +1698,11 @@ Status DBImpl::GetLearningState(SequenceNumber start,
     SequenceNumber l0max = versions_->last_durable_sequence_;
     ColumnFamilyData* cfd = versions_->column_family_set_->GetDefault();
 
+    printf ("GetLearningState start vs last_seq vs durable: %lu vs %lu vs %lu\n", start, 
+            versions_->last_sequence_.load(),
+            versions_->last_durable_sequence_.load()
+            );
+
     // invalid 
     if (start > versions_->last_sequence_ + 1)
     {
@@ -1736,6 +1741,7 @@ Status DBImpl::GetLearningState(SequenceNumber start,
         char* p = buffer;
 
         auto it = mem->NewIterator(opts, &ar);
+        it->SeekToFirst();
         while (it->Valid())
         {
             // iterator order: <user-key, seq-no(desending), type>
@@ -1745,6 +1751,8 @@ Status DBImpl::GetLearningState(SequenceNumber start,
             SequenceNumber seqno = GetInternalKeySeqno(it->key());
             if (seqno >= start)
             {
+                printf ("memtable copy seq %lu\n", seqno);
+
                 // Format of an entry is concatenation of:
                 //  key_size     : varint32 of internal_key.size()
                 //  key bytes    : char[internal_key.size()]

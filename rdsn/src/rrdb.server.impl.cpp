@@ -96,6 +96,7 @@ namespace dsn {
             if (status.ok())
             {
                 _is_open = true;
+                _last_committed_decree = last_durable_decree();
             }
 
             return status.code();
