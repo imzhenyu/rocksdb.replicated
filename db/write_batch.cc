@@ -43,6 +43,7 @@ static const size_t kHeader = 12;
 WriteBatch::WriteBatch(size_t reserved_bytes) {
   rep_.reserve((reserved_bytes > kHeader) ? reserved_bytes : kHeader);
   Clear();
+  use_shared_sequence_number_ = false;
 }
 
 WriteBatch::~WriteBatch() { }
@@ -184,8 +185,9 @@ SequenceNumber WriteBatchInternal::Sequence(const WriteBatch* b) {
   return SequenceNumber(DecodeFixed64(b->rep_.data()));
 }
 
-void WriteBatchInternal::SetSequence(WriteBatch* b, SequenceNumber seq) {
+void WriteBatchInternal::SetSequence(WriteBatch* b, SequenceNumber seq, bool shared) {
   EncodeFixed64(&b->rep_[0], seq);
+  b->use_shared_sequence_number_ = shared;
 }
 
 void WriteBatchInternal::Put(WriteBatch* b, uint32_t column_family_id,
@@ -286,16 +288,18 @@ namespace {
 class MemTableInserter : public WriteBatch::Handler {
  public:
   SequenceNumber sequence_;
+  bool shared_sequence_;
   ColumnFamilyMemTables* cf_mems_;
   bool ignore_missing_column_families_;
   uint64_t log_number_;
   DBImpl* db_;
   const bool dont_filter_deletes_;
 
-  MemTableInserter(SequenceNumber sequence, ColumnFamilyMemTables* cf_mems,
+  MemTableInserter(SequenceNumber sequence, bool shared_sequence, ColumnFamilyMemTables* cf_mems,
                    bool ignore_missing_column_families, uint64_t log_number,
                    DB* db, const bool dont_filter_deletes)
       : sequence_(sequence),
+        shared_sequence_(shared_sequence),
         cf_mems_(cf_mems),
         ignore_missing_column_families_(ignore_missing_column_families),
         log_number_(log_number),
@@ -336,7 +340,7 @@ class MemTableInserter : public WriteBatch::Handler {
                        const Slice& value) override {
     Status seek_status;
     if (!SeekToColumnFamily(column_family_id, &seek_status)) {
-      ++sequence_;
+      if (!shared_sequence_) ++sequence_;
       return seek_status;
     }
     MemTable* mem = cf_mems_->GetMemTable();
@@ -383,7 +387,7 @@ class MemTableInserter : public WriteBatch::Handler {
     // Since all Puts are logged in trasaction logs (if enabled), always bump
     // sequence number. Even if the update eventually fails and does not result
     // in memtable add/update.
-    sequence_++;
+    if (!shared_sequence_) sequence_++;
     cf_mems_->CheckMemtableFull();
     return Status::OK();
   }
@@ -392,7 +396,7 @@ class MemTableInserter : public WriteBatch::Handler {
                          const Slice& value) override {
     Status seek_status;
     if (!SeekToColumnFamily(column_family_id, &seek_status)) {
-      ++sequence_;
+      if (!shared_sequence_) ++sequence_;
       return seek_status;
     }
     MemTable* mem = cf_mems_->GetMemTable();
@@ -463,7 +467,7 @@ class MemTableInserter : public WriteBatch::Handler {
       mem->Add(sequence_, kTypeMerge, key, value);
     }
 
-    sequence_++;
+    if (!shared_sequence_) sequence_++;
     cf_mems_->CheckMemtableFull();
     return Status::OK();
   }
@@ -472,7 +476,7 @@ class MemTableInserter : public WriteBatch::Handler {
                           const Slice& key) override {
     Status seek_status;
     if (!SeekToColumnFamily(column_family_id, &seek_status)) {
-      ++sequence_;
+      if (!shared_sequence_) ++sequence_;
       return seek_status;
     }
     MemTable* mem = cf_mems_->GetMemTable();
@@ -493,7 +497,7 @@ class MemTableInserter : public WriteBatch::Handler {
       }
     }
     mem->Add(sequence_, kTypeDeletion, key, Slice());
-    sequence_++;
+    if (!shared_sequence_) sequence_++;
     cf_mems_->CheckMemtableFull();
     return Status::OK();
   }
@@ -510,7 +514,7 @@ Status WriteBatchInternal::InsertInto(const WriteBatch* b,
                                       bool ignore_missing_column_families,
                                       uint64_t log_number, DB* db,
                                       const bool dont_filter_deletes) {
-  MemTableInserter inserter(WriteBatchInternal::Sequence(b), memtables,
+  MemTableInserter inserter(WriteBatchInternal::Sequence(b), b->use_shared_sequence_number_, memtables,
                             ignore_missing_column_families, log_number, db,
                             dont_filter_deletes);
   return b->Iterate(&inserter);

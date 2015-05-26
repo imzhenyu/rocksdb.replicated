@@ -21,7 +21,6 @@ namespace dsn {
             virtual void prepare_learning_request(__out_param blob& learn_req);
             virtual int  get_learn_state(::dsn::replication::decree start, const blob& learn_req, __out_param::dsn::replication::learn_state& state);
             virtual int  apply_learn_state(::dsn::replication::learn_state& state);
-            virtual ::dsn::replication::decree last_committed_decree() const;
             virtual ::dsn::replication::decree last_durable_decree() const;
 
         private:

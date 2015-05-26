@@ -168,6 +168,7 @@ class WriteBatch : public WriteBatchBase {
  protected:
   std::string rep_;  // See comment in write_batch.cc for the format of rep_
 
+  bool use_shared_sequence_number_;
   // Intentionally copyable
 };
 

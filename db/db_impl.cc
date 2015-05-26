@@ -3212,11 +3212,11 @@ Status DBImpl::Write(const WriteOptions& write_options, WriteBatch* my_batch) {
       const SequenceNumber current_sequence = write_options.given_sequence_number == 0 ?
           (last_sequence + 1) : write_options.given_sequence_number;
 
-      WriteBatchInternal::SetSequence(updates, current_sequence);
+      WriteBatchInternal::SetSequence(updates, current_sequence, write_options.given_sequence_number > 0);
       int my_batch_count = WriteBatchInternal::Count(updates);
 
-      //last_sequence += my_batch_count;
-      last_sequence = current_sequence + my_batch_count - 1;
+      last_sequence = write_options.given_sequence_number == 0 ? 
+          (last_sequence + my_batch_count) : current_sequence;
 
       const uint64_t batch_size = WriteBatchInternal::ByteSize(updates);
       // Record statistics

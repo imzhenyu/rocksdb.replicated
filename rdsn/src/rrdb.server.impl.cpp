@@ -144,15 +144,7 @@ namespace dsn {
         {
             return 0;
         }
-
-        ::dsn::replication::decree rrdb_service_impl::last_committed_decree() const
-        {
-            if (_is_open)
-                return _db->GetLatestSequenceNumber();
-            else
-                return 0;
-        }
-
+        
         ::dsn::replication::decree rrdb_service_impl::last_durable_decree() const
         {
             if (_is_open)
