@@ -37,6 +37,7 @@ struct TableProperties;
 class WriteBatch;
 class Env;
 class EventListener;
+class VersionEdit;
 
 using std::unique_ptr;
 
@@ -508,24 +509,23 @@ class DB {
   }
 
   // get delta state for learner (start, infinite)
-  virtual bool GetLearningState(SequenceNumber start, 
-      /*out*/ std::string& mem_state, 
-      /*out*/ std::string& edit,
-      /*out*/ std::vector<uint64_t>& sstables
+  virtual Status GetLearningState(SequenceNumber start, 
+      /*out*/ Slice& mem_state,
+      /*out*/ std::string& edit_encoded,
+      /*out*/ std::vector<std::string>& sstables
       ) 
   { 
-      return false; 
+      return Status::Aborted(); 
   }
 
   // apply delta state for learnee (start, infinite)
-  virtual bool ApplyLearningState(
+  virtual Status ApplyLearningState(
       SequenceNumber start,
-      const std::string& mem_state,
-      const std::string& edit,
-      const std::vector<uint64_t>& sstables      
+      const Slice& mem_state,
+      std::string& edit_encoded
       )
   { 
-      return false; 
+      return Status::Aborted(); 
   }
 
 #ifndef ROCKSDB_LITE

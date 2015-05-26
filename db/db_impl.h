@@ -158,20 +158,19 @@ class DBImpl : public DB {
   virtual SequenceNumber GetLatestDurableSequenceNumber() const override;
   
   // get delta state for learner (start, infinite)
-  virtual bool GetLearningState(SequenceNumber start,
-      /*out*/ std::string& mem_state,
-      /*out*/ std::string& edit,
-      /*out*/ std::vector<uint64_t>& sstables
+  virtual Status GetLearningState(SequenceNumber start,
+      /*out*/ Slice& mem_state,
+      /*out*/ std::string& edit_encoded,
+      /*out*/ std::vector<std::string>& sstables
       ) override;
 
   // apply delta state for learnee (start, infinite)
-  virtual bool ApplyLearningState(
+  virtual Status ApplyLearningState(
       SequenceNumber start,
-      const std::string& mem_state,
-      const std::string& edit,
-      const std::vector<uint64_t>& sstables
+      const Slice& mem_state,
+      std::string& edit_encoded
       ) override;
-
+  
 #ifndef ROCKSDB_LITE
   virtual Status DisableFileDeletions() override;
   virtual Status EnableFileDeletions(bool force) override;

@@ -180,13 +180,20 @@ class VersionEdit {
     new_files_.push_back(std::make_pair(level, f));
   }
 
+  //
+  // add file directly from FileMetaData
+  //
+  void AddFile(int level, const FileMetaData* file) {
+      new_files_.push_back(std::make_pair(level, *file));
+  }
+
   // Delete the specified "file" from the specified "level".
   void DeleteFile(int level, uint64_t file) {
     deleted_files_.insert({level, file});
   }
 
   // Number of edits
-  size_t NumEntries() { return new_files_.size() + deleted_files_.size(); }
+  size_t NumEntries() const { return new_files_.size() + deleted_files_.size(); }
 
   bool IsColumnFamilyManipulation() {
     return is_column_family_add_ || is_column_family_drop_;

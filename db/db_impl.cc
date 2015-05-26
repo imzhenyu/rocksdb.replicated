@@ -1686,41 +1686,122 @@ SequenceNumber DBImpl::GetLatestDurableSequenceNumber() const {
 }
 
 // get delta state for learner (start, infinite)
-bool DBImpl::GetLearningState(SequenceNumber start,
-    /*out*/ std::string& mem_state,
-    /*out*/ std::string& edit,
-    /*out*/ std::vector<uint64_t>& sstables
+Status DBImpl::GetLearningState(SequenceNumber start,
+    /*out*/ Slice& mem_state,
+    /*out*/ std::string& edit_encoded,
+    /*out*/ std::vector<std::string>& sstables
     )
 {
-    // all state := mem_table +(l0seq) level 0 + (l1seq) (level 1+)+
-    SequenceNumber l0seq = versions_->last_durable_sequence_;
+    // all state := mem_table +(l0max) level 0 + (l0min) (level 1+)+
+    SequenceNumber l0max = versions_->last_durable_sequence_;
+    ColumnFamilyData* cfd = versions_->column_family_set_->GetDefault();
+
+    // invalid 
+    if (start >= versions_->last_sequence_)
+        return Status::InvalidArgument("Invalid start sequence which is larger than learnee's latest one");
 
     // only learn mem_table state is enough
-    if (start >= l0seq)
+    else if (start >= l0max)
     {
+        if (cfd->imm()->size() > 0)
+        {
+            // wait for next round learning
+            return Status::MergeInProgress("Flush in progress");
+        }
 
+        // TODO:
+
+        return Status::OK();
     }
 
     // need to learn sstable files
     else
     {
-        
+        //
+        // we have only Default column family as we don't use column family feature in replication yet
+        //
+        VersionStorageInfo* vsi = cfd->current()->storage_info();
+
+        // prepare edit
+        VersionEdit edit;
+        edit.SetColumnFamily(cfd->GetID());
+        edit.SetComparatorName(cfd->user_comparator()->Name());
+        edit.SetLogNumber(0);
+        edit.SetLastSequence(l0max);
+
+        // fill correspondent files
+        SequenceNumber l0min = l0max;        
+        if (vsi->NumLevelFiles(0) > 0)
+        {
+            l0min = vsi->LevelFiles(0).front()->smallest_seqno;
+        }
+
+        // only learn L0 files is enough (as L0 files are sorted by sequenced number)
+        if (start + 1 >= l0min)
+        {
+            for (auto& v : vsi->LevelFiles(0))
+            {
+                if (v->smallest_seqno > start)
+                {
+                    edit.AddFile(0, v);
+                }
+            }
+        }
+
+        // copy all files in this case (as L1+ files are **not** sorted by sequence number)
+        else
+        {
+            for (int i = vsi->base_level(); i >= 0; i--)
+            {
+                for (auto& v : vsi->LevelFiles(i))
+                {
+                    edit.AddFile(i, v);
+                }
+            }
+        }
+
+        // marshall and collect files
+        edit.EncodeTo(&edit_encoded);
+
+        for (auto& v : edit.GetNewFiles())
+        {
+            std::string s = MakeTableFileName(db_options_.db_paths[v.second.fd.GetPathId()].path, v.second.fd.GetNumber());
+            sstables.push_back(s);
+        }
     }
 
-    return false;
+    return Status::OK();
 }
 
 // apply delta state for learnee (start, infinite)
-bool DBImpl::ApplyLearningState(
+Status DBImpl::ApplyLearningState(
     SequenceNumber start,
-    const std::string& mem_state,
-    const std::string& edit,
-    const std::vector<uint64_t>& sstables
+    const Slice& mem_state,
+    std::string& edit_encoded
     )
 {
-    // all state := mem_table + level 0 + (level 1+)+
+    //
+    // we have only Default column family as we don't use column family feature in replication yet
+    //
+    ColumnFamilyData* cfd = versions_->column_family_set_->GetDefault();
+    VersionEdit edit;
+    Slice ev(edit_encoded.c_str(), edit_encoded.length());
+    edit.DecodeFrom(ev);
 
-    return false;
+    // apply edit first
+    if (edit.NumEntries() > 0)
+    {
+        const MutableCFOptions mutable_cf_options =
+            *cfd->GetLatestMutableCFOptions();
+        auto status = versions_->LogAndApply(cfd, mutable_cf_options, &edit, &mutex_);
+        if (!status.ok())
+            return status;
+    }
+
+    // apply memory state
+
+
+    return Status::OK();
 }
 
 Status DBImpl::RunManualCompaction(ColumnFamilyData* cfd, int input_level,

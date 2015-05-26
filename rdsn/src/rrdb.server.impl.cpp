@@ -1,5 +1,5 @@
 # include "rrdb.server.impl.h"
-
+# include "db/version_edit.h"
 
 namespace dsn {
     namespace apps {
@@ -137,6 +137,9 @@ namespace dsn {
         {
             if (!_is_open)
                 return ERR_SERVICE_NOT_ACTIVE;
+
+            rocksdb::VersionEdit edit;
+            rocksdb::Slice mem_state;
 
             return 0;
         }
