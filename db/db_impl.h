@@ -167,7 +167,7 @@ class DBImpl : public DB {
   // apply delta state for learnee (start, infinite)
   virtual Status ApplyLearningState(
       SequenceNumber start,
-      const Slice& mem_state,
+      Slice& mem_state,
       std::string& edit_encoded
       ) override;
   

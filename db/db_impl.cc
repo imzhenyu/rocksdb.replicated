@@ -1692,26 +1692,87 @@ Status DBImpl::GetLearningState(SequenceNumber start,
     /*out*/ std::vector<std::string>& sstables
     )
 {
+    mutex_.Lock();
+
     // all state := mem_table +(l0max) level 0 + (l0min) (level 1+)+
     SequenceNumber l0max = versions_->last_durable_sequence_;
     ColumnFamilyData* cfd = versions_->column_family_set_->GetDefault();
 
     // invalid 
     if (start >= versions_->last_sequence_)
+    {
+        mutex_.Unlock();
         return Status::InvalidArgument("Invalid start sequence which is larger than learnee's latest one");
+    }
 
     // only learn mem_table state is enough
     else if (start >= l0max)
     {
         if (cfd->imm()->size() > 0)
         {
+            mutex_.Unlock();
+
             // wait for next round learning
             return Status::MergeInProgress("Flush in progress");
         }
 
-        // TODO:
+        // prepare context from mem
+        MemTable *mem = cfd->mem();
+        ReadOptions opts;
+        Arena ar;
+        auto& cmp = mem->GetInternalKeyComparator();
+        std::stringstream ss;
 
-        return Status::OK();
+        // allocate buffer for copy memtable entries
+        size_t buffer_size = mem->ApproximateMemoryUsage();
+        char* buffer = (char*)malloc(buffer_size);
+        char* pend = buffer + buffer_size;
+        char* p = buffer;
+
+        MemTableIterator* it = static_cast<MemTableIterator*>(mem->NewIterator(opts, &ar));
+        while (it->Valid())
+        {
+            // iterator order: <user-key, seq-no(desending), type>
+            // each key() is an AppendInternalKey
+
+            // find those bigger updates with seqno > start
+            SequenceNumber seqno = GetInternalKeySeqno(it->key());
+            if (seqno > start)
+            {
+                // Format of an entry is concatenation of:
+                //  key_size     : varint32 of internal_key.size()
+                //  key bytes    : char[internal_key.size()]
+                //  value_size   : varint32 of value.size()
+                //  value bytes  : char[value.size()]
+                
+                Slice kv = it->KeyValue();
+
+                // resize buffer when necessary
+                while (pend - p < kv.size() + sizeof(int32_t))
+                {
+                    buffer_size = buffer_size * 3 / 2;
+                                        
+                    char* buffer2 = (char*)malloc(buffer_size);
+                    memcpy(buffer2, buffer, p - buffer);
+                    free(buffer);
+                    buffer = buffer2;
+
+                    buffer_size = buffer_size * 3 / 2;
+                    pend = buffer + buffer_size;
+                }
+                
+                // save key, value to mem state
+                *(int32_t*)p = kv.size();
+                memcpy(p + sizeof(int32_t), kv.data(), kv.size());
+                p += sizeof(int32_t) + kv.size();
+            }
+
+            it->Next();
+        }
+
+        mutex_.Unlock();
+
+        mem_state = Slice(buffer, p - buffer);
     }
 
     // need to learn sstable files
@@ -1762,7 +1823,6 @@ Status DBImpl::GetLearningState(SequenceNumber start,
 
         // marshall and collect files
         edit.EncodeTo(&edit_encoded);
-
         for (auto& v : edit.GetNewFiles())
         {
             std::string s = MakeTableFileName(db_options_.db_paths[v.second.fd.GetPathId()].path, v.second.fd.GetNumber());
@@ -1770,13 +1830,14 @@ Status DBImpl::GetLearningState(SequenceNumber start,
         }
     }
 
+    mutex_.Unlock();
     return Status::OK();
 }
 
 // apply delta state for learnee (start, infinite)
 Status DBImpl::ApplyLearningState(
     SequenceNumber start,
-    const Slice& mem_state,
+    Slice& mem_state,
     std::string& edit_encoded
     )
 {
@@ -1799,7 +1860,62 @@ Status DBImpl::ApplyLearningState(
     }
 
     // apply memory state
+    if (mem_state.size() > 0)
+    {
+        MemTable *mem = cfd->mem();
+        char* p = mem_state.data();
+        char* pend = p + mem_state.size();
+        WriteOptions opts;
+        opts.disableWAL = true;
 
+        while (p + sizeof(int32_t) <= pend)
+        {
+            int32_t kv_size = *(int32_t*)p;
+            p += sizeof(int32_t);
+            
+            assert(p + kv_size <= pend);
+            
+            // Format of an entry is concatenation of:
+            //  key_size     : varint32 of internal_key.size()
+            //  key bytes    : char[internal_key.size()]
+            //  value_size   : varint32 of value.size()
+            //  value bytes  : char[value.size()]
+            Slice kv(p, kv_size);
+            Slice internal_key, value;
+            uint32_t key_size, value_size;
+
+            GetVarint32(&kv, &key_size);
+            internal_key = Slice(kv.data(), key_size);
+            
+            ParsedInternalKey pkey;
+            ParseInternalKey(internal_key, &pkey);
+
+            opts.given_sequence_number = pkey.sequence;
+
+            switch (pkey.type)
+            {
+            case kTypeDeletion:
+                Delete(opts, pkey.user_key);
+                break;
+            case kTypeValue:
+                kv = Slice(kv.data() + key_size, kv.size() - key_size);
+                GetVarint32(&kv, &value_size);
+                value = Slice(kv.data(), value_size);
+
+                Put(opts, pkey.user_key, value);
+                break;
+            case kTypeMerge:
+                kv = Slice(kv.data() + key_size, kv.size() - key_size);
+                GetVarint32(&kv, &value_size);
+                value = Slice(kv.data(), value_size);
+
+                Merge(opts, pkey.user_key, value);
+                break;
+            default:
+                assert(false);
+            }
+        }
+    }
 
     return Status::OK();
 }
@@ -3330,6 +3446,7 @@ Status DBImpl::Write(const WriteOptions& write_options, WriteBatch* my_batch) {
 
       const SequenceNumber current_sequence = write_options.given_sequence_number == 0 ?
           (last_sequence + 1) : write_options.given_sequence_number;
+      assert(current_sequence > last_sequence);
 
       WriteBatchInternal::SetSequence(updates, current_sequence, write_options.given_sequence_number > 0);
       int my_batch_count = WriteBatchInternal::Count(updates);

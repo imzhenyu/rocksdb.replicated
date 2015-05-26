@@ -264,6 +264,9 @@ class MemTableIterator: public Iterator {
     return GetLengthPrefixedSlice(key_slice.data() + key_slice.size());
   }
 
+  // return raw key value slice
+  Slice KeyValue() const { return iter_->key(); }
+
   virtual Status status() const override { return Status::OK(); }
 
  private:
