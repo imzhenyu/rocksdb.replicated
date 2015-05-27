@@ -1,5 +1,4 @@
 # include "rrdb.server.impl.h"
-# include "db/version_edit.h"
 
 namespace dsn {
     namespace apps {
@@ -138,10 +137,22 @@ namespace dsn {
             if (!_is_open)
                 return ERR_SERVICE_NOT_ACTIVE;
 
-            rocksdb::VersionEdit edit;
             rocksdb::Slice mem_state;
+            std::string edit;
+            
+            auto status = _db->GetLearningState(start, mem_state, edit, state.files);
+            if (status.ok())
+            {
+                binary_writer writer;
+                writer.write(start);
+                writer.write(edit);
+                state.meta.push_back(writer.get_buffer());
+             
+                blob ms(std::shared_ptr<char>(mem_state.data()), mem_state.size());
+                state.meta.push_back(ms);
+            }
 
-            return 0;
+            return status.code();
         }
 
         int  rrdb_service_impl::apply_learn_state(::dsn::replication::learn_state& state)
@@ -149,7 +160,16 @@ namespace dsn {
             if (!_is_open)
                 return ERR_SERVICE_NOT_ACTIVE;
 
-            return 0;
+            binary_reader reader(state.meta[0]);
+            rocksdb::SequenceNumber start;
+            std::string edit;
+
+            reader.read(start);
+            reader.read(edit);
+
+            rocksdb::Slice mem_state(state.meta[1].data(), state.meta[1].length());
+
+            return _db->ApplyLearningState(start, mem_state, edit).code();
         }
         
         ::dsn::replication::decree rrdb_service_impl::last_durable_decree() const
