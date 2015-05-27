@@ -1851,21 +1851,26 @@ Status DBImpl::ApplyLearningState(
     // we have only Default column family as we don't use column family feature in replication yet
     //
     ColumnFamilyData* cfd = versions_->column_family_set_->GetDefault();
-    VersionEdit edit;
-    Slice ev(edit_encoded.c_str(), edit_encoded.length());
-    edit.DecodeFrom(ev);
 
-    // apply edit first
-    if (edit.NumEntries() > 0)
+    // apply sstables if files learned
+    if (edit_encoded.size() > 0)
     {
-        const MutableCFOptions mutable_cf_options =
-            *cfd->GetLatestMutableCFOptions();
-        auto status = versions_->LogAndApply(cfd, mutable_cf_options, &edit, &mutex_);
-        if (!status.ok())
-            return status;
+        VersionEdit edit;
+        Slice ev(edit_encoded.c_str(), edit_encoded.length());
+        edit.DecodeFrom(ev);
+
+        // apply edit first
+        if (edit.NumEntries() > 0)
+        {
+            const MutableCFOptions mutable_cf_options =
+                *cfd->GetLatestMutableCFOptions();
+            auto status = versions_->LogAndApply(cfd, mutable_cf_options, &edit, &mutex_);
+            if (!status.ok())
+                return status;
+        }
     }
 
-    // apply memory state
+    // apply memory state if state learned
     if (mem_state.size() > 0)
     {
         char* p = (char*)mem_state.data();

@@ -137,7 +137,7 @@ namespace dsn {
             if (!_is_open)
                 return ERR_SERVICE_NOT_ACTIVE;
 
-            rocksdb::Slice mem_state;
+            rocksdb::Slice mem_state("", 0);
             std::string edit;
             
             auto status = _db->GetLearningState(start, mem_state, edit, state.files);
@@ -146,11 +146,11 @@ namespace dsn {
                 binary_writer writer;
                 writer.write(start);
                 writer.write(edit);
-                bool has_meta = mem_state.size() > 0;
-                writer.write(has_meta);
+                bool has_memory_state = mem_state.size() > 0;
+                writer.write(has_memory_state);
                 state.meta.push_back(writer.get_buffer());
            
-                if (has_meta)
+                if (has_memory_state)
                 {
                     std::shared_ptr<char> p((char*)mem_state.data());
                     blob ms(p, static_cast<int>(mem_state.size()));
@@ -169,15 +169,22 @@ namespace dsn {
             binary_reader reader(state.meta[0]);
             rocksdb::SequenceNumber start;
             std::string edit;
-            bool has_meta;
+            bool has_memory_state;
 
             reader.read(start);
             reader.read(edit);
-            reader.read(has_meta);
+            reader.read(has_memory_state);
 
-            rocksdb::Slice mem_state(state.meta[1].data(), state.meta[1].length());
+            rocksdb::Slice mem_state("", 0);            
+            if (has_memory_state)
+            {
+                mem_state = rocksdb::Slice(state.meta[1].data(), state.meta[1].length());
+            }
 
-            return _db->ApplyLearningState(start, mem_state, edit).code();
+            if (!has_memory_state && state.files.size() == 0)
+                return ERR_SUCCESS;
+            else
+                return _db->ApplyLearningState(start, mem_state, edit).code();
         }
         
         ::dsn::replication::decree rrdb_service_impl::last_durable_decree() const
