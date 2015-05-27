@@ -1854,9 +1854,6 @@ Status DBImpl::GetLearningMemTableState(
     MemTable *mem = cfd->mem();
     ReadOptions opts;
     Arena ar;
-    WriteBatch batch;
-    SequenceNumber maxSeq = 0;
-    Slice lastUserKey;
     
     mem->Ref();
     auto it = mem->NewIterator(opts, &ar);
@@ -1874,17 +1871,7 @@ Status DBImpl::GetLearningMemTableState(
         if (pkey.sequence < start)
             continue;
 
-        if (!lastUserKey.empty() && 0 == cfd->user_comparator()->Compare(
-            lastUserKey,
-            pkey.user_key
-            ))
-            continue;
-
-        lastUserKey = pkey.user_key;
-
-        if (pkey.sequence > maxSeq)
-            maxSeq = pkey.sequence;
-
+        WriteBatch batch;
         switch (pkey.type)
         {
         case kTypeDeletion:
@@ -1899,12 +1886,15 @@ Status DBImpl::GetLearningMemTableState(
         default:
             assert(false);
         }
+
+        WriteBatchInternal::SetSequence(&batch, pkey.sequence, true);
+        printf("LEARN %d %lu\n", (int)pkey.type, pkey.sequence);
+
+        Slice content = WriteBatchInternal::Contents(&batch);
+        PutLengthPrefixedSlice(&mem_state, content);
     }
 
     mem->Unref();
-    
-    WriteBatchInternal::SetSequence(&batch, maxSeq, true);
-    WriteBatchInternal::ContentsSwap(&batch, mem_state);
     return Status::OK();
 }
 
@@ -1914,15 +1904,26 @@ Status DBImpl::ApplyLearningMemTableState(
     )
 {
     Slice contents(mem_state.data(), mem_state.size());
-    WriteBatch batch;
-    WriteBatchInternal::SetContents(&batch, contents);
-
     WriteOptions opts;
     opts.disableWAL = true;
-    opts.given_sequence_number = WriteBatchInternal::Sequence(&batch);
-    
-    assert(opts.given_sequence_number > versions_->LastSequence());
-    return Write(opts, &batch);
+
+    while (true)
+    {
+        Slice content;
+        if (!GetLengthPrefixedSlice(&contents, &content))
+            break;
+
+        WriteBatch batch;
+        WriteBatchInternal::SetContents(&batch, content);
+        opts.given_sequence_number = WriteBatchInternal::Sequence(&batch);
+
+        assert(opts.given_sequence_number > versions_->LastSequence());
+        auto status = Write(opts, &batch);
+        if (!status.ok())
+            return status;
+    }
+
+    return Status::OK();
 }
 
 Status DBImpl::RunManualCompaction(ColumnFamilyData* cfd, int input_level,
