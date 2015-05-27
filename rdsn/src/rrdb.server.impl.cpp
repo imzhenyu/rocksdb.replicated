@@ -138,14 +138,17 @@ namespace dsn {
             if (!_is_open)
                 return ERR_SERVICE_NOT_ACTIVE;
 
+            rocksdb::SequenceNumber start0 = start;
+            rocksdb::SequenceNumber end;
             std::string mem_state;
             std::string edit;
             
-            auto status = _db->GetLearningState(start, mem_state, edit, state.files);
+            auto status = _db->GetLearningState(start0, end, mem_state, edit, state.files);
             if (status.ok())
             {
                 binary_writer writer;
-                writer.write(start);
+                writer.write(start0);
+                writer.write(end);
                 writer.write(edit);
                 writer.write(mem_state);
 
@@ -167,17 +170,30 @@ namespace dsn {
             printf("ApplyLearningState result size = %d\n", reader.total_size());
 
             rocksdb::SequenceNumber start;
+            rocksdb::SequenceNumber end;
             std::string edit;
             std::string mem_state;
 
             reader.read(start);
+            reader.read(end);
             reader.read(edit);
             reader.read(mem_state);
                         
             if (mem_state.size() == 0 && state.files.size() == 0)
                 return ERR_SUCCESS;
             else
-                return _db->ApplyLearningState(start, mem_state, edit).code();
+            {
+                auto status = _db->ApplyLearningState(start, mem_state, edit);
+                if (status.ok())
+                {
+                    printf("ApplyLeraningState lastcommitted in DB %lu, result %lu\n",
+                        _last_committed_decree,
+                        end
+                        );
+                    _last_committed_decree = end;
+                }                    
+                return status.code();
+            }   
         }
         
         ::dsn::replication::decree rrdb_service_impl::last_durable_decree() const

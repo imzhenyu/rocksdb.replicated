@@ -157,14 +157,15 @@ class DBImpl : public DB {
   virtual SequenceNumber GetLatestSequenceNumber() const override;
   virtual SequenceNumber GetLatestDurableSequenceNumber() const override;
   
-  // get delta state for learner (start, infinite)
+  // get delta state for learner [start, infinite)
   virtual Status GetLearningState(SequenceNumber start,
+      /*out*/ SequenceNumber& end,
       /*out*/ std::string& mem_state,
       /*out*/ std::string& edit_encoded,
       /*out*/ std::vector<std::string>& sstables
       ) override;
 
-  // apply delta state for learnee (start, infinite)
+  // apply delta state for learnee [start, infinite)
   virtual Status ApplyLearningState(
       SequenceNumber start,
       std::string& mem_state,

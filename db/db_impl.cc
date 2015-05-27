@@ -1687,6 +1687,7 @@ SequenceNumber DBImpl::GetLatestDurableSequenceNumber() const {
 
 // get delta state for learner [start, infinite)
 Status DBImpl::GetLearningState(SequenceNumber start,
+    /*out*/ SequenceNumber& end,
     /*out*/ std::string& mem_state,
     /*out*/ std::string& edit_encoded,
     /*out*/ std::vector<std::string>& sstables
@@ -1714,6 +1715,8 @@ Status DBImpl::GetLearningState(SequenceNumber start,
     else if (start == versions_->last_sequence_ + 1)
     {
         mutex_.Unlock();
+
+        end = start - 1;
         return Status::OK();
     }
 
@@ -1730,7 +1733,11 @@ Status DBImpl::GetLearningState(SequenceNumber start,
 
         auto status = GetLearningMemTableState(start, mem_state);
 
+        if (status.ok())
+            end = versions_->LastSequence();
+
         mutex_.Unlock();
+
         return status;
     }
 
@@ -1788,12 +1795,14 @@ Status DBImpl::GetLearningState(SequenceNumber start,
             sstables.push_back(s);
         }
 
+        end = l0max;
         mutex_.Unlock();
+
         return Status::OK();
     }
 }
 
-// apply delta state for learnee (start, infinite)
+// apply delta state for learnee [start, infinite)
 Status DBImpl::ApplyLearningState(
     SequenceNumber start,
     std::string& mem_state,
