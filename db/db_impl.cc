@@ -25,6 +25,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <map>
 
 #include "db/builder.h"
 #include "db/flush_job.h"
@@ -1854,8 +1855,10 @@ Status DBImpl::GetLearningMemTableState(
     MemTable *mem = cfd->mem();
     ReadOptions opts;
     Arena ar;
-    
+        
     mem->Ref();
+    mem_state.reserve(mem->ApproximateMemoryUsage());
+
     auto it = mem->NewIterator(opts, &ar);
     it->SeekToFirst();
     for (; it->Valid(); it->Next())
@@ -1893,7 +1896,7 @@ Status DBImpl::GetLearningMemTableState(
         Slice content = WriteBatchInternal::Contents(&batch);
         PutLengthPrefixedSlice(&mem_state, content);
     }
-
+    
     mem->Unref();
     return Status::OK();
 }
@@ -1907,22 +1910,62 @@ Status DBImpl::ApplyLearningMemTableState(
     WriteOptions opts;
     opts.disableWAL = true;
 
+    std::multimap<SequenceNumber, Slice> batches;
+
     while (true)
     {
         Slice content;
         if (!GetLengthPrefixedSlice(&contents, &content))
             break;
 
-        WriteBatch batch;
-        WriteBatchInternal::SetContents(&batch, content);
+        SequenceNumber seq = DecodeFixed64(content.data());
+        batches.insert(std::multimap<SequenceNumber, Slice>::value_type(seq, content));
+    }
+
+    WriteBatch batch;
+    SequenceNumber lastSeq = 0;
+    for (auto& kv : batches)
+    {
+        if (kv.first == lastSeq)
+        {
+            WriteBatch batch1;
+            WriteBatchInternal::SetContents(&batch1, kv.second);
+            WriteBatchInternal::Append(&batch, &batch1);
+            continue;
+        }
+
+        if (batch.Count() > 0)
+        {
+            WriteBatchInternal::SetSequence(&batch, lastSeq, true);
+
+            opts.given_sequence_number = WriteBatchInternal::Sequence(&batch);
+
+            printf("APPLY %lu\n", opts.given_sequence_number);
+
+            assert(opts.given_sequence_number > versions_->LastSequence());
+            auto status = Write(opts, &batch);
+            if (!status.ok())
+                return status;
+        }
+
+        lastSeq = kv.first;
+        batch.Clear();
+        WriteBatchInternal::SetContents(&batch, kv.second);
+    }
+
+    if (batch.Count() > 0)
+    {
+        WriteBatchInternal::SetSequence(&batch, lastSeq, true);
+
         opts.given_sequence_number = WriteBatchInternal::Sequence(&batch);
+
+        printf("APPLY %lu\n", opts.given_sequence_number);
 
         assert(opts.given_sequence_number > versions_->LastSequence());
         auto status = Write(opts, &batch);
         if (!status.ok())
             return status;
     }
-
     return Status::OK();
 }
 
