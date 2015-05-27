@@ -1685,7 +1685,7 @@ SequenceNumber DBImpl::GetLatestDurableSequenceNumber() const {
     return versions_->LastDurableSequence();
 }
 
-// get delta state for learner (start, infinite)
+// get delta state for learner [start, infinite)
 Status DBImpl::GetLearningState(SequenceNumber start,
     /*out*/ Slice& mem_state,
     /*out*/ std::string& edit_encoded,
@@ -1699,21 +1699,21 @@ Status DBImpl::GetLearningState(SequenceNumber start,
     ColumnFamilyData* cfd = versions_->column_family_set_->GetDefault();
 
     // invalid 
-    if (start > versions_->last_sequence_)
+    if (start > versions_->last_sequence_ + 1)
     {
         mutex_.Unlock();
         return Status::InvalidArgument("Invalid start sequence which is larger than learnee's latest one");
     }
 
     // learning complete
-    else if (start == versions_->last_sequence_)
+    else if (start == versions_->last_sequence_ + 1)
     {
         mutex_.Unlock();
         return Status::OK();
     }
 
     // only learn mem_table state is enough
-    else if (start >= l0max)
+    else if (start > l0max)
     {
         if (cfd->imm()->size() > 0)
         {
@@ -1743,7 +1743,7 @@ Status DBImpl::GetLearningState(SequenceNumber start,
 
             // find those bigger updates with seqno > start
             SequenceNumber seqno = GetInternalKeySeqno(it->key());
-            if (seqno > start)
+            if (seqno >= start)
             {
                 // Format of an entry is concatenation of:
                 //  key_size     : varint32 of internal_key.size()
@@ -1804,11 +1804,11 @@ Status DBImpl::GetLearningState(SequenceNumber start,
         }
 
         // only learn L0 files is enough (as L0 files are sorted by sequenced number)
-        if (start + 1 >= l0min)
+        if (start >= l0min)
         {
             for (auto& v : vsi->LevelFiles(0))
             {
-                if (v->smallest_seqno > start)
+                if (v->smallest_seqno >= start)
                 {
                     edit.AddFile(0, v);
                 }
