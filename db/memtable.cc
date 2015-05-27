@@ -265,7 +265,7 @@ class MemTableIterator: public Iterator {
   }
 
   // return raw key value slice
-  Slice KeyValue() const { return iter_->key(); }
+  virtual Slice Entry() const  override { return iter_->key(); }
 
   virtual Status status() const override { return Status::OK(); }
 

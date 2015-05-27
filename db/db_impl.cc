@@ -1729,7 +1729,7 @@ Status DBImpl::GetLearningState(SequenceNumber start,
         char* pend = buffer + buffer_size;
         char* p = buffer;
 
-        MemTableIterator* it = static_cast<MemTableIterator*>(mem->NewIterator(opts, &ar));
+        auto it = mem->NewIterator(opts, &ar);
         while (it->Valid())
         {
             // iterator order: <user-key, seq-no(desending), type>
@@ -1745,7 +1745,7 @@ Status DBImpl::GetLearningState(SequenceNumber start,
                 //  value_size   : varint32 of value.size()
                 //  value bytes  : char[value.size()]
                 
-                Slice kv = it->KeyValue();
+                Slice kv = it->Entry();
 
                 // resize buffer when necessary
                 while (pend - p < kv.size() + sizeof(int32_t))
