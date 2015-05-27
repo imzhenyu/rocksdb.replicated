@@ -159,7 +159,7 @@ class DBImpl : public DB {
   
   // get delta state for learner (start, infinite)
   virtual Status GetLearningState(SequenceNumber start,
-      /*out*/ Slice& mem_state,
+      /*out*/ std::string& mem_state,
       /*out*/ std::string& edit_encoded,
       /*out*/ std::vector<std::string>& sstables
       ) override;
@@ -167,9 +167,19 @@ class DBImpl : public DB {
   // apply delta state for learnee (start, infinite)
   virtual Status ApplyLearningState(
       SequenceNumber start,
-      Slice& mem_state,
+      std::string& mem_state,
       std::string& edit_encoded
       ) override;
+
+  Status GetLearningMemTableState(
+      SequenceNumber start,
+      /*out*/ std::string& mem_state
+      );
+
+  Status ApplyLearningMemTableState(
+      SequenceNumber start,
+      std::string& mem_state
+      );
   
 #ifndef ROCKSDB_LITE
   virtual Status DisableFileDeletions() override;

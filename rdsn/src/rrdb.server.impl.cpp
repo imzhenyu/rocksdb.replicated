@@ -138,7 +138,7 @@ namespace dsn {
             if (!_is_open)
                 return ERR_SERVICE_NOT_ACTIVE;
 
-            rocksdb::Slice mem_state("", 0);
+            std::string mem_state;
             std::string edit;
             
             auto status = _db->GetLearningState(start, mem_state, edit, state.files);
@@ -147,18 +147,11 @@ namespace dsn {
                 binary_writer writer;
                 writer.write(start);
                 writer.write(edit);
-                bool has_memory_state = mem_state.size() > 0;
-                writer.write(has_memory_state);
-                state.meta.push_back(writer.get_buffer());
-           
-                if (has_memory_state)
-                {
-                    std::shared_ptr<char> p((char*)mem_state.data());
-                    blob ms(p, static_cast<int>(mem_state.size()));
-                    state.meta.push_back(ms);
+                writer.write(mem_state);
 
-                    printf("GetLearning memory state size = %d\n", ms.length());
-                }
+                printf("GetLearningState result size = %d\n", writer.total_size());
+
+                state.meta.push_back(writer.get_buffer());
             }
 
             return status.code();
@@ -170,22 +163,18 @@ namespace dsn {
                 return ERR_SERVICE_NOT_ACTIVE;
 
             binary_reader reader(state.meta[0]);
+
+            printf("ApplyLearningState result size = %d\n", reader.total_size());
+
             rocksdb::SequenceNumber start;
             std::string edit;
-            bool has_memory_state;
+            std::string mem_state;
 
             reader.read(start);
             reader.read(edit);
-            reader.read(has_memory_state);
-
-            rocksdb::Slice mem_state("", 0);            
-            if (has_memory_state)
-            {
-                mem_state = rocksdb::Slice(state.meta[1].data(), state.meta[1].length());
-                printf("ApplyLearning memory state size = %d\n", (int)mem_state.size());
-            }
-
-            if (!has_memory_state && state.files.size() == 0)
+            reader.read(mem_state);
+                        
+            if (mem_state.size() == 0 && state.files.size() == 0)
                 return ERR_SUCCESS;
             else
                 return _db->ApplyLearningState(start, mem_state, edit).code();

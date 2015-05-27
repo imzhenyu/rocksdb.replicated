@@ -510,7 +510,7 @@ class DB {
 
   // get delta state for learner (start, infinite)
   virtual Status GetLearningState(SequenceNumber start, 
-      /*out*/ Slice& mem_state,
+      /*out*/ std::string& mem_state,
       /*out*/ std::string& edit_encoded,
       /*out*/ std::vector<std::string>& sstables
       ) 
@@ -521,7 +521,7 @@ class DB {
   // apply delta state for learnee (start, infinite)
   virtual Status ApplyLearningState(
       SequenceNumber start,
-      Slice& mem_state,
+      std::string& mem_state,
       std::string& edit_encoded
       )
   { 

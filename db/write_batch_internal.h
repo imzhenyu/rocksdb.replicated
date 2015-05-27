@@ -93,6 +93,10 @@ class WriteBatchInternal {
     return Slice(batch->rep_);
   }
 
+  static void ContentsSwap(WriteBatch* batch, /*out*/ std::string& contents) {
+      batch->rep_.swap(contents);
+  }
+
   static size_t ByteSize(const WriteBatch* batch) {
     return batch->rep_.size();
   }

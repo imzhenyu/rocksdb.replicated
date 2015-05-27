@@ -1687,7 +1687,7 @@ SequenceNumber DBImpl::GetLatestDurableSequenceNumber() const {
 
 // get delta state for learner [start, infinite)
 Status DBImpl::GetLearningState(SequenceNumber start,
-    /*out*/ Slice& mem_state,
+    /*out*/ std::string& mem_state,
     /*out*/ std::string& edit_encoded,
     /*out*/ std::vector<std::string>& sstables
     )
@@ -1728,65 +1728,10 @@ Status DBImpl::GetLearningState(SequenceNumber start,
             return Status::MergeInProgress("Flush in progress");
         }
 
-        // prepare context from mem
-        MemTable *mem = cfd->mem();
-        ReadOptions opts;
-        Arena ar;
-        std::stringstream ss;
-
-        // allocate buffer for copy memtable entries
-        size_t buffer_size = mem->ApproximateMemoryUsage();
-        char* buffer = (char*)malloc(buffer_size);
-        char* pend = buffer + buffer_size;
-        char* p = buffer;
-
-        auto it = mem->NewIterator(opts, &ar);
-        it->SeekToFirst();
-        while (it->Valid())
-        {
-            // iterator order: <user-key, seq-no(desending), type>
-            // each key() is an AppendInternalKey
-
-            // find those bigger updates with seqno > start
-            SequenceNumber seqno = GetInternalKeySeqno(it->key());
-            if (seqno >= start)
-            {
-                printf ("memtable copy seq %lu\n", seqno);
-
-                // Format of an entry is concatenation of:
-                //  key_size     : varint32 of internal_key.size()
-                //  key bytes    : char[internal_key.size()]
-                //  value_size   : varint32 of value.size()
-                //  value bytes  : char[value.size()]
-                
-                Slice kv = it->Entry();
-
-                // resize buffer when necessary
-                while ((size_t)(pend - p) < kv.size() + sizeof(int32_t))
-                {
-                    buffer_size = buffer_size * 3 / 2;
-                                        
-                    char* buffer2 = (char*)malloc(buffer_size);
-                    memcpy(buffer2, buffer, p - buffer);
-                    free(buffer);
-                    buffer = buffer2;
-
-                    buffer_size = buffer_size * 3 / 2;
-                    pend = buffer + buffer_size;
-                }
-                
-                // save key, value to mem state
-                *(int32_t*)p = kv.size();
-                memcpy(p + sizeof(int32_t), kv.data(), kv.size());
-                p += sizeof(int32_t) + kv.size();
-            }
-
-            it->Next();
-        }
+        auto status = GetLearningMemTableState(start, mem_state);
 
         mutex_.Unlock();
-
-        mem_state = Slice(buffer, p - buffer);
+        return status;
     }
 
     // need to learn sstable files
@@ -1842,16 +1787,16 @@ Status DBImpl::GetLearningState(SequenceNumber start,
             std::string s = MakeTableFileName(db_options_.db_paths[v.second.fd.GetPathId()].path, v.second.fd.GetNumber());
             sstables.push_back(s);
         }
-    }
 
-    mutex_.Unlock();
-    return Status::OK();
+        mutex_.Unlock();
+        return Status::OK();
+    }
 }
 
 // apply delta state for learnee (start, infinite)
 Status DBImpl::ApplyLearningState(
     SequenceNumber start,
-    Slice& mem_state,
+    std::string& mem_state,
     std::string& edit_encoded
     )
 {
@@ -1880,70 +1825,88 @@ Status DBImpl::ApplyLearningState(
 
     // apply memory state if state learned
     if (mem_state.size() > 0)
+        return ApplyLearningMemTableState(start, mem_state);
+    else 
+        return Status::OK();
+}
+
+Status DBImpl::GetLearningMemTableState(
+    SequenceNumber start,
+    /*out*/ std::string& mem_state
+    )
+{
+    mutex_.AssertHeld();
+
+    SequenceNumber l0max = versions_->last_durable_sequence_;
+    ColumnFamilyData* cfd = versions_->column_family_set_->GetDefault();
+    assert(start > l0max);
+
+    // prepare context from mem
+    MemTable *mem = cfd->mem();
+    ReadOptions opts;
+    Arena ar;
+    WriteBatch batch;
+    SequenceNumber maxSeq = 0;
+    
+    mem->Ref();
+    auto it = mem->NewIterator(opts, &ar);
+    it->SeekToFirst();
+    while (it->Valid())
     {
-        char* p = (char*)mem_state.data();
-        char* pend = p + mem_state.size();
-        WriteOptions opts;
-        opts.disableWAL = true;
+        // iterator order: <user-key, seq-no(desending), type>
+        // each key() is an AppendInternalKey
 
-        while (p + sizeof(int32_t) <= pend)
+        // find those bigger updates with seqno > start
+        ParsedInternalKey pkey;
+        if (!ParseInternalKey(it->key(), &pkey))
+            continue;
+
+        if (pkey.sequence < start)
+            continue;
+
+        if (pkey.sequence > maxSeq)
+            maxSeq = pkey.sequence;
+
+        switch (pkey.type)
         {
-            int32_t kv_size = *(int32_t*)p;
-            p += sizeof(int32_t);            
-            assert(p + kv_size <= pend);
-
-            Slice kv(p, kv_size);
-            p += kv_size;
-
-            // Format of an entry is concatenation of:
-            //  key_size     : varint32 of internal_key.size()
-            //  key bytes    : char[internal_key.size()]
-            //  value_size   : varint32 of value.size()
-            //  value bytes  : char[value.size()]
-            
-            Slice internal_key, value;
-            uint32_t key_size, value_size;
-
-            bool r = GetVarint32(&kv, &key_size);
-            assert(r);
-
-            internal_key = Slice(kv.data(), key_size);
-            
-            ParsedInternalKey pkey;
-            r = ParseInternalKey(internal_key, &pkey);
-            assert(r);
-
-            opts.given_sequence_number = pkey.sequence;
-
-            Status st;
-            switch (pkey.type)
-            {
-            case kTypeDeletion:
-                st = Delete(opts, pkey.user_key);
-                break;
-            case kTypeValue:
-                kv = Slice(kv.data() + key_size, kv.size() - key_size);
-                GetVarint32(&kv, &value_size);
-                value = Slice(kv.data(), value_size);
-
-                st = Put(opts, pkey.user_key, value);
-                break;
-            case kTypeMerge:
-                kv = Slice(kv.data() + key_size, kv.size() - key_size);
-                GetVarint32(&kv, &value_size);
-                value = Slice(kv.data(), value_size);
-
-                st = Merge(opts, pkey.user_key, value);
-                break;
-            default:
-                assert(false);
-            }
-
-            printf("db apply exec %lu, status = %s\n", opts.given_sequence_number, st.ToString().c_str());
+        case kTypeDeletion:
+            batch.Delete(pkey.user_key);
+            break;
+        case kTypeValue:
+            batch.Put(pkey.user_key, it->value());
+            break;
+        case kTypeMerge:
+            batch.Merge(pkey.user_key, it->value());
+            break;
+        default:
+            assert(false);
         }
+
+        it->Next();
     }
 
+    mem->Unref();
+    
+    WriteBatchInternal::SetSequence(&batch, maxSeq, true);
+    WriteBatchInternal::ContentsSwap(&batch, mem_state);
     return Status::OK();
+}
+
+Status DBImpl::ApplyLearningMemTableState(
+    SequenceNumber start,
+    std::string& mem_state
+    )
+{
+    Slice contents(mem_state.data(), mem_state.size());
+    WriteBatch batch;
+    WriteBatchInternal::SetContents(&batch, contents);
+
+    WriteOptions opts;
+    opts.disableWAL = true;
+    opts.given_sequence_number = WriteBatchInternal::Sequence(&batch);
+    
+    assert(opts.given_sequence_number > versions_->LastSequence());
+    return Write(opts, &batch);
 }
 
 Status DBImpl::RunManualCompaction(ColumnFamilyData* cfd, int input_level,
