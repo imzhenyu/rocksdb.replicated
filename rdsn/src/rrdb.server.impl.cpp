@@ -156,6 +156,8 @@ namespace dsn {
                     std::shared_ptr<char> p((char*)mem_state.data());
                     blob ms(p, static_cast<int>(mem_state.size()));
                     state.meta.push_back(ms);
+
+                    printf("GetLearning memory state size = %d\n", ms.length());
                 }
             }
 
@@ -180,6 +182,7 @@ namespace dsn {
             if (has_memory_state)
             {
                 mem_state = rocksdb::Slice(state.meta[1].data(), state.meta[1].length());
+                printf("ApplyLearning memory state size = %d\n", (int)mem_state.size());
             }
 
             if (!has_memory_state && state.files.size() == 0)

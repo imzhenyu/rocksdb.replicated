@@ -1889,49 +1889,57 @@ Status DBImpl::ApplyLearningState(
         while (p + sizeof(int32_t) <= pend)
         {
             int32_t kv_size = *(int32_t*)p;
-            p += sizeof(int32_t);
-            
+            p += sizeof(int32_t);            
             assert(p + kv_size <= pend);
-            
+
+            Slice kv(p, kv_size);
+            p += kv_size;
+
             // Format of an entry is concatenation of:
             //  key_size     : varint32 of internal_key.size()
             //  key bytes    : char[internal_key.size()]
             //  value_size   : varint32 of value.size()
             //  value bytes  : char[value.size()]
-            Slice kv(p, kv_size);
+            
             Slice internal_key, value;
             uint32_t key_size, value_size;
 
-            GetVarint32(&kv, &key_size);
+            bool r = GetVarint32(&kv, &key_size);
+            assert(r);
+
             internal_key = Slice(kv.data(), key_size);
             
             ParsedInternalKey pkey;
-            ParseInternalKey(internal_key, &pkey);
+            r = ParseInternalKey(internal_key, &pkey);
+            assert(r);
 
             opts.given_sequence_number = pkey.sequence;
 
+            Status st;
             switch (pkey.type)
             {
             case kTypeDeletion:
-                Delete(opts, pkey.user_key);
+                st = Delete(opts, pkey.user_key);
                 break;
             case kTypeValue:
                 kv = Slice(kv.data() + key_size, kv.size() - key_size);
                 GetVarint32(&kv, &value_size);
                 value = Slice(kv.data(), value_size);
 
-                Put(opts, pkey.user_key, value);
+                st = Put(opts, pkey.user_key, value);
                 break;
             case kTypeMerge:
                 kv = Slice(kv.data() + key_size, kv.size() - key_size);
                 GetVarint32(&kv, &value_size);
                 value = Slice(kv.data(), value_size);
 
-                Merge(opts, pkey.user_key, value);
+                st = Merge(opts, pkey.user_key, value);
                 break;
             default:
                 assert(false);
             }
+
+            printf("db apply exec %lu, status = %s\n", opts.given_sequence_number, st.ToString().c_str());
         }
     }
 
