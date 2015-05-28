@@ -1,3 +1,8 @@
+
+###### This project (**rocksdb.replicated**) is to demonstrate how to use the replication framework provided in [Robust Distributed System Nucleus (rDSN)](https://github.com/Microsoft/rDSN) to quickly turn a local component into a partitioned and replicated service for scalability and reliability. 
+
+***
+
 ## RocksDB: A Persistent Key-Value Store for Flash and RAM Storage
 
 [![Build Status](https://travis-ci.org/facebook/rocksdb.svg?branch=master)](https://travis-ci.org/facebook/rocksdb)
