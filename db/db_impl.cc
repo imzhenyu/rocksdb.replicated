@@ -1700,10 +1700,10 @@ Status DBImpl::GetLearningState(SequenceNumber start,
     SequenceNumber l0max = versions_->last_durable_sequence_;
     ColumnFamilyData* cfd = versions_->column_family_set_->GetDefault();
 
-    printf ("GetLearningState start vs last_seq vs durable: %lu vs %lu vs %lu\n", start, 
-            versions_->last_sequence_.load(),
-            versions_->last_durable_sequence_.load()
-            );
+    //printf ("GetLearningState start vs last_seq vs durable: %lu vs %lu vs %lu\n", start, 
+    //        versions_->last_sequence_.load(),
+    //        versions_->last_durable_sequence_.load()
+    //        );
 
     // invalid 
     if (start > versions_->last_sequence_ + 1)
@@ -1825,19 +1825,27 @@ Status DBImpl::ApplyLearningState(
         // apply edit first
         if (edit.NumEntries() > 0)
         {
+            mutex_.Lock();
             const MutableCFOptions mutable_cf_options =
                 *cfd->GetLatestMutableCFOptions();
             auto status = versions_->LogAndApply(cfd, mutable_cf_options, &edit, &mutex_);
             if (!status.ok())
+            {
+                mutex_.Unlock();
                 return status;
+            }
+            mutex_.Unlock();
         }
     }
 
     // apply memory state if state learned
+    Status st;
     if (mem_state.size() > 0)
-        return ApplyLearningMemTableState(start, mem_state);
+        st = ApplyLearningMemTableState(start, mem_state);
     else 
-        return Status::OK();
+        st = Status::OK();
+   
+    return st;
 }
 
 Status DBImpl::GetLearningMemTableState(
@@ -1891,7 +1899,7 @@ Status DBImpl::GetLearningMemTableState(
         }
 
         WriteBatchInternal::SetSequence(&batch, pkey.sequence, true);
-        printf("LEARN %d %lu\n", (int)pkey.type, pkey.sequence);
+        //printf("LEARN %d %lu\n", (int)pkey.type, pkey.sequence);
 
         Slice content = WriteBatchInternal::Contents(&batch);
         PutLengthPrefixedSlice(&mem_state, content);
@@ -1940,7 +1948,7 @@ Status DBImpl::ApplyLearningMemTableState(
 
             opts.given_sequence_number = WriteBatchInternal::Sequence(&batch);
 
-            printf("APPLY %lu\n", opts.given_sequence_number);
+            //printf("APPLY %lu\n", opts.given_sequence_number);
 
             assert(opts.given_sequence_number > versions_->LastSequence());
             auto status = Write(opts, &batch);
@@ -1959,7 +1967,7 @@ Status DBImpl::ApplyLearningMemTableState(
 
         opts.given_sequence_number = WriteBatchInternal::Sequence(&batch);
 
-        printf("APPLY %lu\n", opts.given_sequence_number);
+        //printf("APPLY %lu\n", opts.given_sequence_number);
 
         assert(opts.given_sequence_number > versions_->LastSequence());
         auto status = Write(opts, &batch);
@@ -3472,7 +3480,7 @@ Status DBImpl::Write(const WriteOptions& write_options, WriteBatch* my_batch) {
   }
 
   uint64_t last_sequence = versions_->LastSequence();
-  printf ("versions_->LastSeq = %lu, given = %lu\n", last_sequence, write_options.given_sequence_number);
+  //printf ("versions_->LastSeq = %lu, given = %lu\n", last_sequence, write_options.given_sequence_number);
   WriteThread::Writer* last_writer = &w;
   if (status.ok()) {
     autovector<WriteBatch*> write_batch_group;
