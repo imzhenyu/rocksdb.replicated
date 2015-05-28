@@ -1,5 +1,21 @@
 
-###### This project (**rocksdb.replicated**) is to demonstrate how to use the replication framework provided in [Robust Distributed System Nucleus (rDSN)](https://github.com/Microsoft/rDSN) to quickly turn a local component into a partitioned and replicated service for scalability and reliability. 
+###### This project (**rocksdb.replicated**) is to demonstrate how to use the replication framework provided in [Robust Distributed System Nucleus (rDSN)](https://github.com/Microsoft/rDSN) to quickly turn a local component into a partitioned and replicated service for scalability and reliability. RocksDB is an open source local storage engine from Facebook originated from levelDB by Google. See details below.
+
+-- STATUS UPDATE: functional features done, performance test and turning ahead ---
+
+##### Installation
+* Install rocksdb as usual (e.g., sudo make install at the top directory)
+* Install [rDSN](https://github.com/Microsoft/rDSN/wiki/Installation)
+* Run the following commands and it should work
+```bash
+cd $rockdb$/replication/src
+mkdir build
+cd build
+cmake ..
+cd bin/rrdb
+./rrdb
+```
+* For more information like bug support and how to deploy etc., please go to [rDSN](https://github.com/Microsoft/rDSN/wiki) for details.
 
 ***
 
