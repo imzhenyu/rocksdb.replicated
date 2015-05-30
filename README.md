@@ -12,6 +12,7 @@ cd $rockdb$/replication/src
 mkdir build
 cd build
 cmake ..
+make
 cd bin/rrdb
 ./rrdb
 ```
