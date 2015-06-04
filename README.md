@@ -4,7 +4,7 @@
 -- STATUS UPDATE: functional features done, performance test and turning ahead ---
 
 ##### Installation
-* Install rocksdb as usual after git clone (e.g., sudo make install at the top directory)
+* Install rocksdb as usual after git clone (e.g., sudo make shared_lib install at the top directory)
 * Install [rDSN](https://github.com/Microsoft/rDSN/wiki/Installation)
 * Run the following commands and it should work
 ```bash
