@@ -91,6 +91,7 @@ namespace dsn {
             rocksdb::Options opts;
             opts.create_if_missing = create_new;
             opts.error_if_exists = create_new;
+            opts.write_buffer_size = 40 * 1024; // 40 K for testing now
 
             auto status = rocksdb::DB::Open(opts, dir() + "/rdb", &_db);
             if (status.ok())
@@ -183,6 +184,12 @@ namespace dsn {
                 return ERR_SUCCESS;
             else
             {
+                if (start <= _db->GetLatestSequenceNumber())
+                {
+                    close(true);
+                    open(true);
+                }
+
                 auto status = _db->ApplyLearningState(start, mem_state, edit);
                 if (status.ok())
                 {

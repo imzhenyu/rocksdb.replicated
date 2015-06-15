@@ -1687,7 +1687,7 @@ SequenceNumber DBImpl::GetLatestDurableSequenceNumber() const {
 }
 
 // get delta state for learner [start, infinite)
-Status DBImpl::GetLearningState(SequenceNumber start,
+Status DBImpl::GetLearningState(/*out*/ SequenceNumber& start,
     /*out*/ SequenceNumber& end,
     /*out*/ std::string& mem_state,
     /*out*/ std::string& edit_encoded,
@@ -1779,6 +1779,7 @@ Status DBImpl::GetLearningState(SequenceNumber start,
         // copy all files in this case (as L1+ files are **not** sorted by sequence number)
         else
         {
+            start = 0;
             for (int i = vsi->base_level(); i >= 0; i--)
             {
                 for (auto& v : vsi->LevelFiles(i))
