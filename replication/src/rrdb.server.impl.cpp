@@ -91,6 +91,7 @@ namespace dsn {
             rocksdb::Options opts;
             opts.create_if_missing = create_new;
             opts.error_if_exists = create_new;
+            opts.write_buffer_size = 1024*40; // 40K for testing now 
 
             auto status = rocksdb::DB::Open(opts, dir() + "/rdb", &_db);
             if (status.ok())
