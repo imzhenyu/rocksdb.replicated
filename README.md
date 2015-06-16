@@ -4,8 +4,8 @@
 -- STATUS UPDATE: functional features done, performance test and turning ahead ---
 
 ##### Installation
-* Install rocksdb as usual after git clone (e.g., sudo make install at the top directory)
 * Install [rDSN](https://github.com/Microsoft/rDSN/wiki/Installation)
+* git clone rocksdb.replicated 
 * Run the following commands and it should work
 ```bash
 cd $rockdb$/replication/src
@@ -14,7 +14,7 @@ cd build
 cmake ..
 make
 cd bin/rrdb
-./rrdb
+./rrdb config.ini
 ```
 * For more information like bug support and how to deploy etc., please go to [rDSN](https://github.com/Microsoft/rDSN/wiki) for details.
 
