@@ -2055,7 +2055,10 @@ void VersionSet::LogAndApplyHelper(ColumnFamilyData* cfd,
     edit->SetPrevLogNumber(prev_log_number_);
   }
   edit->SetNextFile(next_file_number_.load());
-  edit->SetLastSequence(last_sequence_);
+
+  if (!edit->has_last_sequence_) {
+    edit->SetLastSequence(last_sequence_);
+  }
   
   builder->Apply(edit);
 }

@@ -1754,7 +1754,7 @@ Status DBImpl::GetLearningState(/*out*/ SequenceNumber& start,
         VersionEdit edit;
         edit.SetColumnFamily(cfd->GetID());
         edit.SetComparatorName(cfd->user_comparator()->Name());
-        edit.SetLogNumber(0);
+        //edit.SetLogNumber(0); // not set log number as it is not aligned on different replicas 
         edit.SetLastSequence(l0max);
 
         // fill correspondent files

@@ -94,7 +94,7 @@ namespace dsn {
             opts.error_if_exists = create_new;
             opts.write_buffer_size = 40 * 1024; // 40 K for testing now
 
-            auto status = rocksdb::DB::Open(opts, dir() + "/rdb", &_db);
+            auto status = rocksdb::DB::Open(opts, data_dir() + "/rdb", &_db);
             if (status.ok())
             {
                 _is_open = true;
@@ -115,8 +115,9 @@ namespace dsn {
 
             if (clear_state)
             {
-                boost::filesystem::path lp = dir();
+                boost::filesystem::path lp = data_dir();
                 ::boost::filesystem::remove_all(lp);
+                ::boost::filesystem::create_directory(lp);
             }
             return 0;
         }
@@ -202,17 +203,26 @@ namespace dsn {
                     boost::filesystem::path old_p = learn_dir() + f;
                     boost::filesystem::path new_p = data_dir() + f;
 
+                    // create directory recursively if necessary
+                    boost::filesystem::path path = new_p;
+                    path = path.remove_filename();
+                    if (!boost::filesystem::exists(path))
+                        boost::filesystem::create_directories(path);
+
                     boost::filesystem::rename(old_p, new_p);
                 }
 
                 auto status = _db->ApplyLearningState(start, mem_state, edit);
                 if (status.ok())
                 {
-                    printf("ApplyLeraningState lastcommitted in DB %lu, result %lu\n",
-                        _last_committed_decree.load(),
-                        end
-                        );
                     _last_committed_decree = end;
+                    printf("ApplyLeraningState lastcommitted in DB %s, <C,D> to <%lld, %lld> with <start,end> as <%lld, %lld>\n",
+                        data_dir().c_str(),
+                        static_cast<long long int>(last_committed_decree()),
+                        static_cast<long long int>(last_durable_decree()),
+                        static_cast<long long int>(start),
+                        static_cast<long long int>(end)
+                        );
                 }                    
                 return status.code();
             }   
