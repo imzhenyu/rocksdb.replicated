@@ -1,4 +1,5 @@
 # include "rrdb.server.impl.h"
+# include <boost/filesystem.hpp>
 
 namespace dsn {
     namespace apps {
@@ -111,6 +112,12 @@ namespace dsn {
             _is_open = false;
             delete _db;
             _db = nullptr;
+
+            if (clear_state)
+            {
+                boost::filesystem::path lp = dir();
+                ::boost::filesystem::remove_all(lp);
+            }
             return 0;
         }
 
@@ -184,10 +191,18 @@ namespace dsn {
                 return ERR_SUCCESS;
             else
             {
-                if (start <= _db->GetLatestSequenceNumber())
+                if (start == 0)
                 {
                     close(true);
                     open(true);
+                }
+
+                for (auto &f : state.files)
+                {
+                    boost::filesystem::path old_p = learn_dir() + f;
+                    boost::filesystem::path new_p = data_dir() + f;
+
+                    boost::filesystem::rename(old_p, new_p);
                 }
 
                 auto status = _db->ApplyLearningState(start, mem_state, edit);
