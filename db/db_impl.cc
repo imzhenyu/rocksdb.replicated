@@ -1697,7 +1697,8 @@ Status DBImpl::GetLearningState(/*out*/ SequenceNumber& start,
     mutex_.Lock();
 
     // all state := mem_table +(l0max) level 0 + (l0min) (level 1+)+
-    SequenceNumber l0max = versions_->last_durable_sequence_;
+    SequenceNumber last_seq = versions_->last_sequence_;
+    SequenceNumber last_durable_seq = versions_->last_durable_sequence_;
     ColumnFamilyData* cfd = versions_->column_family_set_->GetDefault();
 
     //printf ("GetLearningState start vs last_seq vs durable: %lu vs %lu vs %lu\n", start, 
@@ -1706,23 +1707,28 @@ Status DBImpl::GetLearningState(/*out*/ SequenceNumber& start,
     //        );
 
     // invalid 
-    if (start > versions_->last_sequence_ + 1)
+    // { start > LastSequence + 1 }
+    if (start > last_seq + 1)
     {
         mutex_.Unlock();
+
         return Status::InvalidArgument("Invalid start sequence which is larger than learnee's latest one");
     }
 
     // learning complete
-    else if (start == versions_->last_sequence_ + 1)
+    // { start == LastSequence + 1 }
+    else if (start == last_seq + 1)
     {
+        end = start - 1;
+
         mutex_.Unlock();
 
-        end = start - 1;
         return Status::OK();
     }
 
     // only learn mem_table state is enough
-    else if (start > l0max)
+    // { LastDurableSequence < start <= LastSequence }
+    else if (start > last_durable_seq)
     {
         if (cfd->imm()->size() > 0)
         {
@@ -1735,7 +1741,7 @@ Status DBImpl::GetLearningState(/*out*/ SequenceNumber& start,
         auto status = GetLearningMemTableState(start, mem_state);
 
         if (status.ok())
-            end = versions_->LastSequence();
+            end = last_seq;
 
         mutex_.Unlock();
 
@@ -1743,6 +1749,7 @@ Status DBImpl::GetLearningState(/*out*/ SequenceNumber& start,
     }
 
     // need to learn sstable files
+    // { start <= LastDurableSequence }
     else
     {
         //
@@ -1754,29 +1761,40 @@ Status DBImpl::GetLearningState(/*out*/ SequenceNumber& start,
         VersionEdit edit;
         edit.SetColumnFamily(cfd->GetID());
         edit.SetComparatorName(cfd->user_comparator()->Name());
-        //edit.SetLogNumber(0); // not set log number as it is not aligned on different replicas 
-        edit.SetLastSequence(l0max);
-
-        // fill correspondent files
-        SequenceNumber l0min = l0max;        
-        if (vsi->NumLevelFiles(0) > 0)
-        {
-            l0min = vsi->LevelFiles(0).front()->smallest_seqno;
-        }
+        //edit.SetLogNumber(0); // not set log number as it is not aligned on different replicas
+        edit.SetLastSequence(last_durable_seq);
 
         // only learn L0 files is enough (as L0 files are sorted by sequenced number)
-        if (start >= l0min)
+        // { NumLevel0Files > 0 && Level0Min <= start <= LastDurableSequence }
+        if (vsi->NumLevelFiles(0) > 0 && start >= vsi->LevelFiles(0).front()->smallest_seqno)
         {
             for (auto& v : vsi->LevelFiles(0))
             {
-                if (v->smallest_seqno >= start)
+                // file sequence range is full covered by [start, infinite)
+                // { start <= FileSmallestSequenceNumber }
+                if (start <= v->smallest_seqno)
                 {
                     edit.AddFile(0, v);
+                }
+
+                // file sequence range is partly covered by [start, infinite)
+                // { FileSmallestSequenceNumber < start <= FileLargestSequenceNumber }
+                else if (start <= v->largest_seqno)
+                {
+                    // TODO: handle this case
+                }
+
+                // file sequence range is not covered by [start, infinite)
+                // { start > FileLargestSequenceNumber }
+                else
+                {
+                    // ignore it
                 }
             }
         }
 
         // copy all files in this case (as L1+ files are **not** sorted by sequence number)
+        // { NumLevel0Files == 0 || start < Level0Min }
         else
         {
             start = 0;
@@ -1797,7 +1815,8 @@ Status DBImpl::GetLearningState(/*out*/ SequenceNumber& start,
             sstables.push_back(s);
         }
 
-        end = l0max;
+        end = last_durable_seq;
+
         mutex_.Unlock();
 
         return Status::OK();
