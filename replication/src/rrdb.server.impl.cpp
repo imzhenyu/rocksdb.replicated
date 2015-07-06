@@ -25,6 +25,8 @@ namespace dsn {
                 rocksdb::Slice svalue(update.value.data(), update.value.length());
                 rocksdb::Status status = _db->Put(opts, skey, svalue);
                 reply(status.code());
+
+                ++_last_committed_decree;
             }
             else
             {
@@ -42,6 +44,8 @@ namespace dsn {
                 rocksdb::Slice skey(key.data(), key.length());
                 rocksdb::Status status = _db->Delete(opts, skey);
                 reply(status.code());
+
+                ++_last_committed_decree;
             }
             else
             {
@@ -60,6 +64,8 @@ namespace dsn {
                 rocksdb::Slice svalue(update.value.data(), update.value.length());
                 rocksdb::Status status = _db->Merge(opts, skey, svalue);
                 reply(status.code());
+
+                ++_last_committed_decree;
             }
             else
             {
@@ -227,7 +233,7 @@ namespace dsn {
                 return status.code();
             }   
         }
-        
+                
         ::dsn::replication::decree rrdb_service_impl::last_durable_decree() const
         {
             if (_is_open)
