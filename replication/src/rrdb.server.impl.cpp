@@ -195,7 +195,7 @@ namespace dsn {
             reader.read(mem_state);
                         
             if (mem_state.size() == 0 && state.files.size() == 0)
-                return ERR_SUCCESS;
+                return ERR_OK;
             else
             {
                 if (start == 0)

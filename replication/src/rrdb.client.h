@@ -41,7 +41,7 @@ public:
 			0 
             );
 		resp_task->wait();
-		if (resp_task->error() == ::dsn::ERR_SUCCESS)
+		if (resp_task->error() == ::dsn::ERR_OK)
 		{
 			unmarshall(resp_task->get_response()->reader(), resp);
 		}
@@ -73,7 +73,7 @@ public:
 		const int& resp,
 		void* context)
 	{
-		if (err != ::dsn::ERR_SUCCESS) std::cout << "reply RPC_RRDB_RRDB_PUT err : " << err.to_string() << std::endl;
+		if (err != ::dsn::ERR_OK) std::cout << "reply RPC_RRDB_RRDB_PUT err : " << err.to_string() << std::endl;
 		else
 		{
 			std::cout << "reply RPC_RRDB_RRDB_PUT ok" << std::endl;
@@ -103,7 +103,7 @@ public:
 		std::shared_ptr<update_request>& update, 
 		std::shared_ptr<int>& resp)
 	{
-		if (err != ::dsn::ERR_SUCCESS) std::cout << "reply RPC_RRDB_RRDB_PUT err : " << err.to_string() << std::endl;
+		if (err != ::dsn::ERR_OK) std::cout << "reply RPC_RRDB_RRDB_PUT err : " << err.to_string() << std::endl;
 		else
 		{
 			std::cout << "reply RPC_RRDB_RRDB_PUT ok" << std::endl;
@@ -130,7 +130,7 @@ public:
 			0 
             );
 		resp_task->wait();
-		if (resp_task->error() == ::dsn::ERR_SUCCESS)
+		if (resp_task->error() == ::dsn::ERR_OK)
 		{
 			unmarshall(resp_task->get_response()->reader(), resp);
 		}
@@ -162,7 +162,7 @@ public:
 		const int& resp,
 		void* context)
 	{
-		if (err != ::dsn::ERR_SUCCESS) std::cout << "reply RPC_RRDB_RRDB_REMOVE err : " << err.to_string() << std::endl;
+		if (err != ::dsn::ERR_OK) std::cout << "reply RPC_RRDB_RRDB_REMOVE err : " << err.to_string() << std::endl;
 		else
 		{
 			std::cout << "reply RPC_RRDB_RRDB_REMOVE ok" << std::endl;
@@ -192,7 +192,7 @@ public:
 		std::shared_ptr<::dsn::blob>& key, 
 		std::shared_ptr<int>& resp)
 	{
-		if (err != ::dsn::ERR_SUCCESS) std::cout << "reply RPC_RRDB_RRDB_REMOVE err : " << err.to_string() << std::endl;
+		if (err != ::dsn::ERR_OK) std::cout << "reply RPC_RRDB_RRDB_REMOVE err : " << err.to_string() << std::endl;
 		else
 		{
 			std::cout << "reply RPC_RRDB_RRDB_REMOVE ok" << std::endl;
@@ -219,7 +219,7 @@ public:
 			0 
             );
 		resp_task->wait();
-		if (resp_task->error() == ::dsn::ERR_SUCCESS)
+		if (resp_task->error() == ::dsn::ERR_OK)
 		{
 			unmarshall(resp_task->get_response()->reader(), resp);
 		}
@@ -251,7 +251,7 @@ public:
 		const int& resp,
 		void* context)
 	{
-		if (err != ::dsn::ERR_SUCCESS) std::cout << "reply RPC_RRDB_RRDB_MERGE err : " << err.to_string() << std::endl;
+		if (err != ::dsn::ERR_OK) std::cout << "reply RPC_RRDB_RRDB_MERGE err : " << err.to_string() << std::endl;
 		else
 		{
 			std::cout << "reply RPC_RRDB_RRDB_MERGE ok" << std::endl;
@@ -281,7 +281,7 @@ public:
 		std::shared_ptr<update_request>& update, 
 		std::shared_ptr<int>& resp)
 	{
-		if (err != ::dsn::ERR_SUCCESS) std::cout << "reply RPC_RRDB_RRDB_MERGE err : " << err.to_string() << std::endl;
+		if (err != ::dsn::ERR_OK) std::cout << "reply RPC_RRDB_RRDB_MERGE err : " << err.to_string() << std::endl;
 		else
 		{
 			std::cout << "reply RPC_RRDB_RRDB_MERGE ok" << std::endl;
@@ -310,7 +310,7 @@ public:
 			read_semantic 
             );
 		resp_task->wait();
-		if (resp_task->error() == ::dsn::ERR_SUCCESS)
+		if (resp_task->error() == ::dsn::ERR_OK)
 		{
 			unmarshall(resp_task->get_response()->reader(), resp);
 		}
@@ -344,7 +344,7 @@ public:
 		const read_response& resp,
 		void* context)
 	{
-		if (err != ::dsn::ERR_SUCCESS) std::cout << "reply RPC_RRDB_RRDB_GET err : " << err.to_string() << std::endl;
+		if (err != ::dsn::ERR_OK) std::cout << "reply RPC_RRDB_RRDB_GET err : " << err.to_string() << std::endl;
 		else
 		{
 			std::cout << "reply RPC_RRDB_RRDB_GET ok" << std::endl;
@@ -376,7 +376,7 @@ public:
 		std::shared_ptr<::dsn::blob>& key, 
 		std::shared_ptr<read_response>& resp)
 	{
-		if (err != ::dsn::ERR_SUCCESS) std::cout << "reply RPC_RRDB_RRDB_GET err : " << err.to_string() << std::endl;
+		if (err != ::dsn::ERR_OK) std::cout << "reply RPC_RRDB_RRDB_GET err : " << err.to_string() << std::endl;
 		else
 		{
 			std::cout << "reply RPC_RRDB_RRDB_GET ok" << std::endl;
