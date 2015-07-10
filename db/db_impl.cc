@@ -2114,9 +2114,8 @@ Status DBImpl::GetLearningMemTableState(
 {
     mutex_.AssertHeld();
 
-    SequenceNumber l0max = versions_->last_durable_sequence_;
+    assert(start > versions_->last_durable_sequence_);
     ColumnFamilyData* cfd = versions_->column_family_set_->GetDefault();
-    assert(start > l0max);
 
     // prepare context from mem
     MemTable *mem = cfd->mem();
