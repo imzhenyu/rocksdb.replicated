@@ -7,9 +7,9 @@
 #pragma once
 #include <algorithm>
 #include <stdio.h>
-#include <sys/time.h>
 #include <time.h>
 #include <iostream>
+#include "port/sys_time.h"
 #include "rocksdb/env.h"
 #include "rocksdb/status.h"
 
@@ -162,6 +162,10 @@ class HdfsEnv : public Env {
   static uint64_t gettid() {
     assert(sizeof(pthread_t) <= sizeof(uint64_t));
     return (uint64_t)pthread_self();
+  }
+
+  virtual uint64_t GetThreadID() const override {
+    return HdfsEnv::gettid();
   }
 
  private:
@@ -360,6 +364,10 @@ class HdfsEnv : public Env {
   virtual void IncBackgroundThreadsIfNeeded(int number, Priority pri) override {
   }
   virtual std::string TimeToString(uint64_t number) override { return ""; }
+
+  virtual uint64_t GetThreadID() const override {
+    return 0;
+  }
 };
 }
 

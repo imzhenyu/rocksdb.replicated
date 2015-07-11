@@ -21,33 +21,61 @@ perl_command = perl -n \
   -e 'printf "%7.3f %s %s\n", $$a[3], $$a[6] == 0 ? "PASS" : "FAIL", $$t'
 quoted_perl_command = $(subst ','\'',$(perl_command))
 
-ifneq ($(MAKECMDGOALS),dbg)
+# DEBUG_LEVEL can have three values:
+# * DEBUG_LEVEL=2; this is the ultimate debug mode. It will compile rocksdb
+# without any optimizations. To compile with level 2, issue `make dbg`
+# * DEBUG_LEVEL=1; debug level 1 enables all assertions and debug code, but
+# compiles rocksdb with -O2 optimizations. this is the default debug level.
+# `make all` or `make <binary_target>` compile RocksDB with debug level 1.
+# We use this debug level when developing RocksDB.
+# * DEBUG_LEVEL=0; this is the debug level we use for release. If you're
+# running rocksdb in production you most definitely want to compile RocksDB
+# with debug level 0. To compile with level 0, run `make shared_lib`,
+# `make install-shared`, `make static_lib`, `make install-static` or
+# `make install`
+DEBUG_LEVEL=1
+
+ifeq ($(MAKECMDGOALS),dbg)
+	DEBUG_LEVEL=2
+endif
+
+ifeq ($(MAKECMDGOALS),shared_lib)
+	DEBUG_LEVEL=0
+endif
+
+ifeq ($(MAKECMDGOALS),install-shared)
+	DEBUG_LEVEL=0
+endif
+
+ifeq ($(MAKECMDGOALS),static_lib)
+	DEBUG_LEVEL=0
+endif
+
+ifeq ($(MAKECMDGOALS),install-static)
+	DEBUG_LEVEL=0
+endif
+
+ifeq ($(MAKECMDGOALS),install)
+	DEBUG_LEVEL=0
+endif
+
+ifeq ($(MAKECMDGOALS),rocksdbjavastatic)
+	DEBUG_LEVEL=0
+endif
+
+# compile with -O2 if debug level is not 2
+ifneq ($(DEBUG_LEVEL), 2)
 OPT += -O2 -fno-omit-frame-pointer
 ifneq ($(MACHINE),ppc64) # ppc64 doesn't support -momit-leaf-frame-pointer
 OPT += -momit-leaf-frame-pointer
 endif
-else
-# intentionally left blank
 endif
 
-ifeq ($(MAKECMDGOALS),shared_lib)
+# if we're compiling for release, compile without debug code (-DNDEBUG) and
+# don't treat warnings as errors
+ifeq ($(DEBUG_LEVEL),0)
 OPT += -DNDEBUG
-endif
-
-ifeq ($(MAKECMDGOALS),install-shared)
-OPT += -DNDEBUG
-endif
-
-ifeq ($(MAKECMDGOALS),static_lib)
-OPT += -DNDEBUG
-endif
-
-ifeq ($(MAKECMDGOALS),install-static)
-OPT += -DNDEBUG
-endif
-
-ifeq ($(MAKECMDGOALS),install)
-OPT += -DNDEBUG
+DISABLE_WARNING_AS_ERROR=1
 endif
 
 #-----------------------------------------------
@@ -149,12 +177,16 @@ CXXFLAGS += $(WARNING_FLAGS) -I. -I./include $(PLATFORM_CXXFLAGS) $(OPT) -Woverl
 LDFLAGS += $(PLATFORM_LDFLAGS)
 
 date := $(shell date +%F)
-git_sha := $(shell git describe HEAD 2>/dev/null)
+ifdef FORCE_GIT_SHA
+	git_sha := $(FORCE_GIT_SHA)
+else
+	git_sha := $(shell git rev-parse HEAD 2>/dev/null)
+endif
 gen_build_version =							\
   printf '%s\n'								\
     '\#include "build_version.h"'					\
     'const char* rocksdb_build_git_sha =				\
-      "rocksdb_build_git_sha:$(git_sha)";'				\
+      "rocksdb_build_git_sha:$(git_sha)";'			\
     'const char* rocksdb_build_git_date =				\
       "rocksdb_build_git_date:$(date)";'				\
     'const char* rocksdb_build_compile_date = __DATE__;'
@@ -199,6 +231,7 @@ TESTS = \
 	dynamic_bloom_test \
 	c_test \
 	cache_test \
+	checkpoint_test \
 	coding_test \
 	corruption_test \
 	crc32c_test \
@@ -255,7 +288,10 @@ TESTS = \
 	thread_list_test \
 	sst_dump_test \
 	compact_files_test \
-	perf_context_test
+	perf_context_test \
+	optimistic_transaction_test \
+	write_callback_test \
+	compaction_job_stats_test
 
 SUBSET :=  $(shell echo $(TESTS) |sed s/^.*$(ROCKSDBTESTS_START)/$(ROCKSDBTESTS_START)/)
 
@@ -264,7 +300,9 @@ TOOLS = \
 	db_sanity_test \
 	db_stress \
 	ldb \
-	db_repl_stress
+	db_repl_stress \
+	rocksdb_dump \
+	rocksdb_undump
 
 BENCHMARKS = db_bench table_reader_bench cache_bench memtablerep_bench
 
@@ -310,7 +348,8 @@ $(SHARED3): $(SHARED4)
 endif
 
 $(SHARED4):
-	$(CXX) $(PLATFORM_SHARED_LDFLAGS)$(SHARED3) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) $(LIB_SOURCES) $(LDFLAGS) -o $@
+	$(CXX) $(PLATFORM_SHARED_LDFLAGS)$(SHARED3) $(CXXFLAGS) $(PLATFORM_SHARED_CFLAGS) $(LIB_SOURCES) \
+		$(LDFLAGS) -o $@
 
 endif  # PLATFORM_SHARED_EXT
 
@@ -330,11 +369,11 @@ dbg: $(LIBRARY) $(BENCHMARKS) $(TOOLS) $(TESTS)
 # creates static library and programs
 release:
 	$(MAKE) clean
-	OPT="-DNDEBUG -O2" $(MAKE) static_lib $(TOOLS) db_bench -j32
+	OPT="-DNDEBUG -O2" $(MAKE) static_lib $(TOOLS) db_bench
 
 coverage:
 	$(MAKE) clean
-	COVERAGEFLAGS="-fprofile-arcs -ftest-coverage" LDFLAGS+="-lgcov" $(MAKE) all check -j32
+	COVERAGEFLAGS="-fprofile-arcs -ftest-coverage" LDFLAGS+="-lgcov" $(MAKE) all check
 	cd coverage && ./coverage_test.sh
         # Delete intermediate files
 	find . -type f -regex ".*\.\(\(gcda\)\|\(gcno\)\)" -exec rm {} \;
@@ -465,18 +504,21 @@ CLEAN_FILES += t LOG $(TMPD)
 watch-log:
 	watch --interval=0 'sort -k7,7nr -k4,4gr LOG|$(quoted_perl_command)'
 
-# If GNU parallel is installed, run the tests in parallel,
+# If J != 1 and GNU parallel is installed, run the tests in parallel,
 # via the check_0 rule above.  Otherwise, run them sequentially.
 check: all
-	$(AM_V_GEN)case $$(parallel --gnu --help 2>/dev/null) in	\
-	  *'GNU Parallel'*)						\
-	    t=$$($(test_names));					\
-	    $(MAKE) T="$$t" TMPD=$(TMPD) check_0;;			\
-	  *)								\
-	    for t in $(TESTS); do					\
-	      echo "===== Running $$t"; ./$$t || exit 1; done;;		\
-	esac
+	$(AM_V_GEN)if test "$(J)" != 1                                  \
+	    && (parallel --gnu --help 2>/dev/null) |                    \
+	        grep -q 'GNU Parallel';                                 \
+	then                                                            \
+	    t=$$($(test_names));                                        \
+	    $(MAKE) T="$$t" TMPD=$(TMPD) check_0;                       \
+	else                                                            \
+	    for t in $(TESTS); do                                       \
+	      echo "===== Running $$t"; ./$$t || exit 1; done;          \
+	fi
 	rm -rf $(TMPD)
+	sh tools/rocksdb_dump_test.sh
 
 check_some: $(SUBSET) ldb_tests
 	for t in $(SUBSET); do echo "===== Running $$t"; ./$$t || exit 1; done
@@ -539,7 +581,7 @@ unity: unity.o
 clean:
 	rm -f $(BENCHMARKS) $(TOOLS) $(TESTS) $(LIBRARY) $(SHARED)
 	rm -rf $(CLEAN_FILES) ios-x86 ios-arm scan_build_report
-	find . -name "*.[oda]" -exec rm {} \;
+	find . -name "*.[oda]" -exec rm -f {} \;
 	find . -type f -regex ".*\.\(\(gcda\)\|\(gcno\)\)" -exec rm {} \;
 	rm -rf bzip2* snappy* zlib* lz4*
 
@@ -657,6 +699,9 @@ prefix_test: db/prefix_test.o $(LIBOBJECTS) $(TESTHARNESS)
 backupable_db_test: utilities/backupable/backupable_db_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(AM_LINK)
 
+checkpoint_test: utilities/checkpoint/checkpoint_test.o $(LIBOBJECTS) $(TESTHARNESS)
+	$(AM_LINK)
+
 document_db_test: utilities/document/document_db_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(AM_LINK)
 
@@ -676,6 +721,9 @@ flush_job_test: db/flush_job_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(AM_LINK)
 
 compaction_job_test: db/compaction_job_test.o $(LIBOBJECTS) $(TESTHARNESS)
+	$(AM_LINK)
+
+compaction_job_stats_test: db/compaction_job_stats_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(AM_LINK)
 
 wal_manager_test: db/wal_manager_test.o $(LIBOBJECTS) $(TESTHARNESS)
@@ -750,6 +798,12 @@ deletefile_test: db/deletefile_test.o $(LIBOBJECTS) $(TESTHARNESS)
 geodb_test: utilities/geodb/geodb_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(AM_LINK)
 
+rocksdb_dump: tools/dump/rocksdb_dump.o $(LIBOBJECTS)
+	$(AM_LINK)
+
+rocksdb_undump: tools/dump/rocksdb_undump.o $(LIBOBJECTS)
+	$(AM_LINK)
+
 cuckoo_table_builder_test: table/cuckoo_table_builder_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(AM_LINK)
 
@@ -763,9 +817,6 @@ listener_test: db/listener_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(AM_LINK)
 
 thread_list_test: util/thread_list_test.o $(LIBOBJECTS) $(TESTHARNESS)
-	$(AM_LINK)
-
-compactor_test: utilities/compaction/compactor_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(AM_LINK)
 
 compact_files_test: db/compact_files_test.o $(LIBOBJECTS) $(TESTHARNESS)
@@ -783,6 +834,9 @@ sst_dump_test: util/sst_dump_test.o $(LIBOBJECTS) $(TESTHARNESS)
 memenv_test : util/memenv_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(AM_LINK)
 
+optimistic_transaction_test: utilities/transactions/optimistic_transaction_test.o $(LIBOBJECTS) $(TESTHARNESS)
+	$(AM_LINK)
+
 mock_env_test : util/mock_env_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(AM_LINK)
 
@@ -796,6 +850,9 @@ auto_roll_logger_test: util/auto_roll_logger_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(AM_LINK)
 
 memtable_list_test: db/memtable_list_test.o $(LIBOBJECTS) $(TESTHARNESS)
+	$(AM_LINK)
+
+write_callback_test: db/write_callback_test.o $(LIBOBJECTS) $(TESTHARNESS)
 	$(AM_LINK)
 
 sst_dump: tools/sst_dump.o $(LIBOBJECTS)
@@ -907,7 +964,7 @@ rocksdbjavastatic: $(java_libobjects) libz.a libbz2.a libsnappy.a liblz4.a
 	$(CXX) $(CXXFLAGS) -I./java/. $(JAVA_INCLUDE) -shared -fPIC \
 	  -o ./java/target/$(ROCKSDBJNILIB) $(JNI_NATIVE_SOURCES) \
 	  $(java_libobjects) $(COVERAGEFLAGS) \
-	  libz.a libbz2.a libsnappy.a liblz4.a
+	  libz.a libbz2.a libsnappy.a liblz4.a $(LDFLAGS)
 	cd java/target;strip -S -x $(ROCKSDBJNILIB)
 	cd java;jar -cf target/$(ROCKSDB_JAR) HISTORY*.md
 	cd java/target;jar -uf $(ROCKSDB_JAR) $(ROCKSDBJNILIB)

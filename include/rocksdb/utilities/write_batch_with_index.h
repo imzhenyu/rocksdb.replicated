@@ -9,7 +9,10 @@
 // A WriteBatchWithIndex with a binary searchable index built for all the keys
 // inserted.
 
+#ifndef ROCKSDB_LITE
 #pragma once
+
+#include <string>
 
 #include "rocksdb/comparator.h"
 #include "rocksdb/iterator.h"
@@ -22,6 +25,9 @@ namespace rocksdb {
 
 class ColumnFamilyHandle;
 class Comparator;
+class DB;
+struct ReadOptions;
+struct DBOptions;
 
 enum WriteType { kPutRecord, kMergeRecord, kDeleteRecord, kLogDataRecord };
 
@@ -50,7 +56,9 @@ class WBWIIterator {
 
   virtual void Prev() = 0;
 
-  virtual const WriteEntry& Entry() const = 0;
+  // the return WriteEntry is only valid until the next mutation of
+  // WriteBatchWithIndex
+  virtual WriteEntry Entry() const = 0;
 
   virtual Status status() const = 0;
 };
@@ -118,9 +126,42 @@ class WriteBatchWithIndex : public WriteBatchBase {
   // default column family
   Iterator* NewIteratorWithBase(Iterator* base_iterator);
 
+  // Similar to DB::Get() but will only read the key from this batch.
+  // If the batch does not have enough data to resolve Merge operations,
+  // MergeInProgress status may be returned.
+  Status GetFromBatch(ColumnFamilyHandle* column_family,
+                      const DBOptions& options, const Slice& key,
+                      std::string* value);
+
+  // Similar to previous function but does not require a column_family.
+  // Note:  An InvalidArgument status will be returned if there are any Merge
+  // operators for this key.
+  Status GetFromBatch(const DBOptions& options, const Slice& key,
+                      std::string* value) {
+    return GetFromBatch(nullptr, options, key, value);
+  }
+
+  // Similar to DB::Get() but will also read writes from this batch.
+  //
+  // This function will query both this batch and the DB and then merge
+  // the results using the DB's merge operator (if the batch contains any
+  // merge requests).
+  //
+  // Setting read_options.snapshot will affect what is read from the DB
+  // but will NOT change which keys are read from the batch (the keys in
+  // this batch do not yet belong to any snapshot and will be fetched
+  // regardless).
+  Status GetFromBatchAndDB(DB* db, const ReadOptions& read_options,
+                           const Slice& key, std::string* value);
+  Status GetFromBatchAndDB(DB* db, const ReadOptions& read_options,
+                           ColumnFamilyHandle* column_family, const Slice& key,
+                           std::string* value);
+
  private:
   struct Rep;
   Rep* rep;
 };
 
 }  // namespace rocksdb
+
+#endif  // !ROCKSDB_LITE

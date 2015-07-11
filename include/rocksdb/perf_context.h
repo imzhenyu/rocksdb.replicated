@@ -9,22 +9,14 @@
 #include <stdint.h>
 #include <string>
 
+#include "rocksdb/perf_level.h"
+#include "port/port.h"
+
 namespace rocksdb {
-
-enum PerfLevel {
-  kDisable        = 0,  // disable perf stats
-  kEnableCount    = 1,  // enable only count stats
-  kEnableTime     = 2   // enable time stats too
-};
-
-// set the perf stats level
-void SetPerfLevel(PerfLevel level);
-
-// get current perf stats level
-PerfLevel GetPerfLevel();
 
 // A thread local context for gathering performance counter efficiently
 // and transparently.
+// Use SetPerfLevel(PerfLevel::kEnableTime) to enable time stats.
 
 struct PerfContext {
 
@@ -64,16 +56,34 @@ struct PerfContext {
   uint64_t seek_internal_seek_time;
   // total time spent on iterating internal entries to find the next user entry
   uint64_t find_next_user_entry_time;
-  // total time spent on pre or post processing when writing a record
-  uint64_t write_pre_and_post_process_time;
-  uint64_t write_wal_time;            // total time spent on writing to WAL
+
+  // total time spent on writing to WAL
+  uint64_t write_wal_time;
   // total time spent on writing to mem tables
   uint64_t write_memtable_time;
+  // total time spent on delaying write
+  uint64_t write_delay_time;
+  // total time spent on writing a record, excluding the above three times
+  uint64_t write_pre_and_post_process_time;
+
   uint64_t db_mutex_lock_nanos;      // time spent on acquiring DB mutex.
   // Time spent on waiting with a condition variable created with DB mutex.
   uint64_t db_condition_wait_nanos;
   // Time spent on merge operator.
   uint64_t merge_operator_time_nanos;
+
+  // Time spent on reading index block from block cache or SST file
+  uint64_t read_index_block_nanos;
+  // Time spent on reading filter block from block cache or SST file
+  uint64_t read_filter_block_nanos;
+  // Time spent on creating data block iterator
+  uint64_t new_table_block_iter_nanos;
+  // Time spent on creating a iterator of an SST file.
+  uint64_t new_table_iterator_nanos;
+  // Time spent on seeking a key in data/index blocks
+  uint64_t block_seek_nanos;
+  // Time spent on finding or creating a table reader
+  uint64_t find_table_nanos;
 };
 
 #if defined(NPERF_CONTEXT) || defined(IOS_CROSS_COMPILE)

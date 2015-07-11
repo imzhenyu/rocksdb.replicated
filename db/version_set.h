@@ -131,6 +131,11 @@ class VersionStorageInfo {
   // record results in files_by_size_. The largest files are listed first.
   void UpdateFilesBySize();
 
+  void GenerateLevel0NonOverlapping();
+  bool level0_non_overlapping() const {
+    return level0_non_overlapping_;
+  }
+
   int MaxInputLevel() const;
 
   // Returns the maxmimum compaction score for levels 1 to max
@@ -342,6 +347,9 @@ class VersionStorageInfo {
   // size. The file with the largest size is at the front.
   // This vector stores the index of the file from files_.
   std::vector<std::vector<int>> files_by_size_;
+
+  // If true, means that files in L0 have keys with non overlapping ranges
+  bool level0_non_overlapping_;
 
   // An index into files_by_size_ that specifies the first
   // file that is not yet compacted
@@ -609,7 +617,9 @@ class VersionSet {
   uint64_t MinLogNumber() const {
     uint64_t min_log_num = std::numeric_limits<uint64_t>::max();
     for (auto cfd : *column_family_set_) {
-      if (min_log_num > cfd->GetLogNumber()) {
+      // It's safe to ignore dropped column families here:
+      // cfd->IsDropped() becomes true after the drop is persisted in MANIFEST.
+      if (min_log_num > cfd->GetLogNumber() && !cfd->IsDropped()) {
         min_log_num = cfd->GetLogNumber();
       }
     }
@@ -623,9 +633,8 @@ class VersionSet {
   // Add all files listed in any live version to *live.
   void AddLiveFiles(std::vector<FileDescriptor>* live_list);
 
-  // Return the approximate offset in the database of the data for
-  // "key" as of version "v".
-  uint64_t ApproximateOffsetOf(Version* v, const InternalKey& key);
+  // Return the approximate size of data to be scanned for range [start, end)
+  uint64_t ApproximateSize(Version* v, const Slice& start, const Slice& end);
 
   // Return the size of the current manifest file
   uint64_t manifest_file_size() const { return manifest_file_size_; }
@@ -661,6 +670,13 @@ class VersionSet {
       if (this->status->ok()) *this->status = s;
     }
   };
+
+  // ApproximateSize helper
+  uint64_t ApproximateSizeLevel0(Version* v, const LevelFilesBrief& files_brief,
+                                 const Slice& start, const Slice& end);
+
+  uint64_t ApproximateSize(Version* v, const FdWithKeyRange& f,
+                           const Slice& key);
 
   // Save current contents to *log
   Status WriteSnapshot(log::Writer* log);

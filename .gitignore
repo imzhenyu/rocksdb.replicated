@@ -21,6 +21,13 @@ make_config.mk
 *.o-*
 *.swp
 *~
+*.vcxproj
+*.vcxproj.filters
+*.sln
+*.cmake
+CMakeCache.txt
+CMakeFiles/
+build/
 
 ldb
 manifest_dump
@@ -33,6 +40,8 @@ package/
 .phutil_module_cache
 unity
 tags
+rocksdb_dump
+rocksdb_undump
 
 java/out
 java/target

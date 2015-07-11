@@ -3,6 +3,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 #pragma once
 
+#include <stdint.h>
 #include <string>
 #include <map>
 #include "rocksdb/status.h"
@@ -24,7 +25,7 @@ namespace rocksdb {
 //      ++pos) {
 //   ...
 // }
-typedef std::map<const std::string, std::string> UserCollectedProperties;
+typedef std::map<std::string, std::string> UserCollectedProperties;
 
 // TableProperties contains a bunch of read-only properties of its associated
 // table.
@@ -129,6 +130,9 @@ class TablePropertiesCollector {
 
   // The name of the properties collector can be used for debugging purpose.
   virtual const char* Name() const = 0;
+
+  // EXPERIMENTAL Return whether the output file should be further compacted
+  virtual bool NeedCompact() const { return false; }
 };
 
 // Constructs TablePropertiesCollector. Internals create a new

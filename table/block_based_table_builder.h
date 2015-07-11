@@ -10,6 +10,8 @@
 #pragma once
 #include <stdint.h>
 #include <limits>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "rocksdb/flush_block_policy.h"
@@ -23,6 +25,9 @@ class BlockBuilder;
 class BlockHandle;
 class WritableFile;
 struct BlockBasedTableOptions;
+
+extern const uint64_t kBlockBasedTableMagicNumber;
+extern const uint64_t kLegacyBlockBasedTableMagicNumber;
 
 class BlockBasedTableBuilder : public TableBuilder {
  public:
@@ -67,6 +72,11 @@ class BlockBasedTableBuilder : public TableBuilder {
   // Size of the file generated so far.  If invoked after a successful
   // Finish() call, returns the size of the final generated file.
   uint64_t FileSize() const override;
+
+  bool NeedCompact() const override;
+
+  // Get table properties
+  TableProperties GetTableProperties() const override;
 
  private:
   bool ok() const { return status().ok(); }

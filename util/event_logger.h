@@ -11,14 +11,15 @@
 #include <chrono>
 
 #include "rocksdb/env.h"
+#include "util/log_buffer.h"
 
 namespace rocksdb {
 
-// JSONWritter doesn't support objects in arrays yet. There wasn't a need for
+// JSONWriter doesn't support objects in arrays yet. There wasn't a need for
 // that.
-class JSONWritter {
+class JSONWriter {
  public:
-  JSONWritter() : state_(kExpectKey), first_element_(true) { stream_ << "{"; }
+  JSONWriter() : state_(kExpectKey), first_element_(true) { stream_ << "{"; }
 
   void AddKey(const std::string& key) {
     assert(state_ == kExpectKey);
@@ -56,11 +57,8 @@ class JSONWritter {
   }
 
   void StartArray() {
-    assert(state_ == kExpectKey);
+    assert(state_ == kExpectValue);
     state_ = kInArray;
-    if (!first_element_) {
-      stream_ << ", ";
-    }
     stream_ << "[";
     first_element_ = true;
   }
@@ -74,6 +72,7 @@ class JSONWritter {
 
   void StartObject() {
     assert(state_ == kExpectValue);
+    state_ = kExpectKey;
     stream_ << "{";
     first_element_ = true;
   }
@@ -86,7 +85,7 @@ class JSONWritter {
 
   std::string Get() const { return stream_.str(); }
 
-  JSONWritter& operator<<(const char* val) {
+  JSONWriter& operator<<(const char* val) {
     if (state_ == kExpectKey) {
       AddKey(val);
     } else {
@@ -95,24 +94,24 @@ class JSONWritter {
     return *this;
   }
 
-  JSONWritter& operator<<(const std::string& val) {
+  JSONWriter& operator<<(const std::string& val) {
     return *this << val.c_str();
   }
 
   template <typename T>
-  JSONWritter& operator<<(const T& val) {
+  JSONWriter& operator<<(const T& val) {
     assert(state_ != kExpectKey);
     AddValue(val);
     return *this;
   }
 
  private:
-  enum JSONWritterState {
+  enum JSONWriterState {
     kExpectKey,
     kExpectValue,
     kInArray,
   };
-  JSONWritterState state_;
+  JSONWriterState state_;
   bool first_element_;
   std::ostringstream stream_;
 };
@@ -122,15 +121,21 @@ class EventLoggerStream {
   template <typename T>
   EventLoggerStream& operator<<(const T& val) {
     MakeStream();
-    *json_writter_ << val;
+    *json_writer_ << val;
     return *this;
   }
+
+  void StartArray() { json_writer_->StartArray(); }
+  void EndArray() { json_writer_->EndArray(); }
+  void StartObject() { json_writer_->StartObject(); }
+  void EndObject() { json_writer_->EndObject(); }
+
   ~EventLoggerStream();
 
  private:
   void MakeStream() {
-    if (!json_writter_) {
-      json_writter_ = new JSONWritter();
+    if (!json_writer_) {
+      json_writer_ = new JSONWriter();
       *this << "time_micros"
             << std::chrono::duration_cast<std::chrono::microseconds>(
                    std::chrono::system_clock::now().time_since_epoch()).count();
@@ -138,9 +143,12 @@ class EventLoggerStream {
   }
   friend class EventLogger;
   explicit EventLoggerStream(Logger* logger);
-  Logger* logger_;
+  explicit EventLoggerStream(LogBuffer* log_buffer);
+  // exactly one is non-nullptr
+  Logger* const logger_;
+  LogBuffer* const log_buffer_;
   // ownership
-  JSONWritter* json_writter_;
+  JSONWriter* json_writer_;
 };
 
 // here is an example of the output that will show up in the LOG:
@@ -149,8 +157,18 @@ class EventLoggerStream {
 // "file_size": 1909699}
 class EventLogger {
  public:
+  static const char* Prefix() {
+    return "EVENT_LOG_v1";
+  }
+
   explicit EventLogger(Logger* logger) : logger_(logger) {}
   EventLoggerStream Log() { return EventLoggerStream(logger_); }
+  EventLoggerStream LogToBuffer(LogBuffer* log_buffer) {
+    return EventLoggerStream(log_buffer);
+  }
+  void Log(const JSONWriter& jwriter);
+  static void Log(Logger* logger, const JSONWriter& jwriter);
+  static void LogToBuffer(LogBuffer* log_buffer, const JSONWriter& jwriter);
 
  private:
   Logger* logger_;

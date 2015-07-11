@@ -28,7 +28,7 @@ your make commands, like this: `PORTABLE=1 make static_lib`
       data compression.
 
 * All our tools depend on:
-  - [gflags](https://code.google.com/p/gflags/) - a library that handles
+  - [gflags](https://gflags.github.io/gflags/) - a library that handles
       command line flags processing. You can compile rocksdb library even
       if you don't have gflags installed.
 
@@ -75,8 +75,11 @@ your make commands, like this: `PORTABLE=1 make static_lib`
         * Update XCode:  run `xcode-select --install` (or install it from XCode App's settting).
         * Install via [homebrew](http://brew.sh/).
             * If you're first time developer in MacOS, you still need to run: `xcode-select --install` in your command line.
-            * run `brew tap homebrew/dupes; brew install gcc47 --use-llvm` to install gcc 4.7 (or higher).
+            * run `brew tap homebrew/versions; brew install gcc47 --use-llvm` to install gcc 4.7 (or higher).
     * run `brew install rocksdb`
 
 * **iOS**:
   * Run: `TARGET_OS=IOS make static_lib`. When building the project which uses rocksdb iOS library, make sure to define two important pre-processing macros: `ROCKSDB_LITE` and `IOS_CROSS_COMPILE`.
+
+* **Windows**:
+  * Read the follow the instructions at CMakeLists.txt

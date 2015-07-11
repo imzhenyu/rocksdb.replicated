@@ -57,6 +57,8 @@ class CuckooTableBuilder: public TableBuilder {
   // Finish() call, returns the size of the final generated file.
   uint64_t FileSize() const override;
 
+  TableProperties GetTableProperties() const override { return properties_; }
+
  private:
   struct CuckooBucket {
     CuckooBucket()
@@ -66,7 +68,7 @@ class CuckooTableBuilder: public TableBuilder {
     // We assume number of items is <= 2^32.
     uint32_t make_space_for_key_call_id;
   };
-  static const uint32_t kMaxVectorIdx = std::numeric_limits<int32_t>::max();
+  static const uint32_t kMaxVectorIdx = INT32_MAX;
 
   bool MakeSpaceForKey(const autovector<uint64_t>& hash_vals,
                        const uint32_t call_id,

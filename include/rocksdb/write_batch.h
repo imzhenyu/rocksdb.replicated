@@ -26,6 +26,7 @@
 #define STORAGE_ROCKSDB_INCLUDE_WRITE_BATCH_H_
 
 #include <string>
+#include <stdint.h>
 #include "rocksdb/status.h"
 #include "rocksdb/write_batch_base.h"
 
@@ -63,6 +64,13 @@ class WriteBatch : public WriteBatchBase {
   void Merge(ColumnFamilyHandle* column_family, const Slice& key,
              const Slice& value) override;
   void Merge(const Slice& key, const Slice& value) override {
+    Merge(nullptr, key, value);
+  }
+
+  // variant that takes SliceParts
+  void Merge(ColumnFamilyHandle* column_family, const SliceParts& key,
+             const SliceParts& value) override;
+  void Merge(const SliceParts& key, const SliceParts& value) override {
     Merge(nullptr, key, value);
   }
 
