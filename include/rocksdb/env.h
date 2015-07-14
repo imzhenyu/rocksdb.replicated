@@ -23,6 +23,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "port/port.h"
 #include "rocksdb/status.h"
 #include "rocksdb/thread_status.h"
 

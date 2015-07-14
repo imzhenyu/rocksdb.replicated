@@ -15,6 +15,7 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
+#include "port/port.h"
 #include "rocksdb/metadata.h"
 #include "rocksdb/version.h"
 #include "rocksdb/iterator.h"

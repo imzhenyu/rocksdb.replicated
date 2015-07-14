@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <string>
 
+#include "port/port.h"
 #include "rocksdb/perf_level.h"
 
 namespace rocksdb {
