@@ -1969,7 +1969,7 @@ Status DBImpl::GetLearningState(/*out*/ SequenceNumber& start,
     // { LastDurableSequence < start <= LastSequence }
     else if (start > last_durable_seq)
     {
-        if (cfd->imm()->size() > 0)
+        if (cfd->imm()->NumNotFlushed() > 0)
         {
             mutex_.Unlock();
 
