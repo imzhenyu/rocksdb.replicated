@@ -15,7 +15,13 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
-#include "port/port.h"
+
+# if defined(OS_WIN) || defined(_WIN32)
+# ifndef __attribute__
+# define __attribute__(A)
+# endif
+# endif
+
 #include "rocksdb/metadata.h"
 #include "rocksdb/version.h"
 #include "rocksdb/iterator.h"

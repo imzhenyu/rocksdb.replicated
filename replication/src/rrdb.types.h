@@ -18,35 +18,35 @@
 # include "rrdb_types.h" 
 
 namespace dsn { namespace apps { 
-	// ---------- update_request -------------
-	inline void marshall(::dsn::binary_writer& writer, const update_request& val, uint16_t pos = 0xffff)
-	{
-		boost::shared_ptr<::dsn::binary_writer_transport> transport(new ::dsn::binary_writer_transport(writer));
-		::apache::thrift::protocol::TBinaryProtocol proto(transport);
-		::dsn::marshall_rpc_args<update_request>(&proto, val, &update_request::write);
-	};
+    // ---------- update_request -------------
+    inline void marshall(::dsn::binary_writer& writer, const update_request& val, uint16_t pos = 0xffff)
+    {
+        boost::shared_ptr<::dsn::binary_writer_transport> transport(new ::dsn::binary_writer_transport(writer));
+        ::apache::thrift::protocol::TBinaryProtocol proto(transport);
+        ::dsn::marshall_rpc_args<update_request>(&proto, val, &update_request::write);
+    };
 
-	inline void unmarshall(::dsn::binary_reader& reader, __out_param update_request& val)
-	{
-		boost::shared_ptr<::dsn::binary_reader_transport> transport(new ::dsn::binary_reader_transport(reader));
-		::apache::thrift::protocol::TBinaryProtocol proto(transport);
-		::dsn::unmarshall_rpc_args<update_request>(&proto, val, &update_request::read);
-	};
+    inline void unmarshall(::dsn::binary_reader& reader, __out_param update_request& val)
+    {
+        boost::shared_ptr<::dsn::binary_reader_transport> transport(new ::dsn::binary_reader_transport(reader));
+        ::apache::thrift::protocol::TBinaryProtocol proto(transport);
+        ::dsn::unmarshall_rpc_args<update_request>(&proto, val, &update_request::read);
+    };
 
-	// ---------- read_response -------------
-	inline void marshall(::dsn::binary_writer& writer, const read_response& val, uint16_t pos = 0xffff)
-	{
-		boost::shared_ptr<::dsn::binary_writer_transport> transport(new ::dsn::binary_writer_transport(writer));
-		::apache::thrift::protocol::TBinaryProtocol proto(transport);
-		::dsn::marshall_rpc_args<read_response>(&proto, val, &read_response::write);
-	};
+    // ---------- read_response -------------
+    inline void marshall(::dsn::binary_writer& writer, const read_response& val, uint16_t pos = 0xffff)
+    {
+        boost::shared_ptr<::dsn::binary_writer_transport> transport(new ::dsn::binary_writer_transport(writer));
+        ::apache::thrift::protocol::TBinaryProtocol proto(transport);
+        ::dsn::marshall_rpc_args<read_response>(&proto, val, &read_response::write);
+    };
 
-	inline void unmarshall(::dsn::binary_reader& reader, __out_param read_response& val)
-	{
-		boost::shared_ptr<::dsn::binary_reader_transport> transport(new ::dsn::binary_reader_transport(reader));
-		::apache::thrift::protocol::TBinaryProtocol proto(transport);
-		::dsn::unmarshall_rpc_args<read_response>(&proto, val, &read_response::read);
-	};
+    inline void unmarshall(::dsn::binary_reader& reader, __out_param read_response& val)
+    {
+        boost::shared_ptr<::dsn::binary_reader_transport> transport(new ::dsn::binary_reader_transport(reader));
+        ::apache::thrift::protocol::TBinaryProtocol proto(transport);
+        ::dsn::unmarshall_rpc_args<read_response>(&proto, val, &read_response::read);
+    };
 
 } } 
 
@@ -54,43 +54,43 @@ namespace dsn { namespace apps {
 # else // use rDSN's data encoding/decoding
 
 namespace dsn { namespace apps { 
-	// ---------- update_request -------------
-	struct update_request
-	{
-		::dsn::blob key;
-		::dsn::blob value;
-	};
+    // ---------- update_request -------------
+    struct update_request
+    {
+        ::dsn::blob key;
+        ::dsn::blob value;
+    };
 
-	inline void marshall(::dsn::binary_writer& writer, const update_request& val, uint16_t pos = 0xffff)
-	{
-		marshall(writer, val.key, pos);
-		marshall(writer, val.value, pos);
-	};
+    inline void marshall(::dsn::binary_writer& writer, const update_request& val, uint16_t pos = 0xffff)
+    {
+        marshall(writer, val.key, pos);
+        marshall(writer, val.value, pos);
+    };
 
-	inline void unmarshall(::dsn::binary_reader& reader, __out_param update_request& val)
-	{
-		unmarshall(reader, val.key);
-		unmarshall(reader, val.value);
-	};
+    inline void unmarshall(::dsn::binary_reader& reader, __out_param update_request& val)
+    {
+        unmarshall(reader, val.key);
+        unmarshall(reader, val.value);
+    };
 
-	// ---------- read_response -------------
-	struct read_response
-	{
-		int error;
-		std::string value;
-	};
+    // ---------- read_response -------------
+    struct read_response
+    {
+        int error;
+        std::string value;
+    };
 
-	inline void marshall(::dsn::binary_writer& writer, const read_response& val, uint16_t pos = 0xffff)
-	{
-		marshall(writer, val.error, pos);
-		marshall(writer, val.value, pos);
-	};
+    inline void marshall(::dsn::binary_writer& writer, const read_response& val, uint16_t pos = 0xffff)
+    {
+        marshall(writer, val.error, pos);
+        marshall(writer, val.value, pos);
+    };
 
-	inline void unmarshall(::dsn::binary_reader& reader, __out_param read_response& val)
-	{
-		unmarshall(reader, val.error);
-		unmarshall(reader, val.value);
-	};
+    inline void unmarshall(::dsn::binary_reader& reader, __out_param read_response& val)
+    {
+        unmarshall(reader, val.error);
+        unmarshall(reader, val.value);
+    };
 
 } } 
 

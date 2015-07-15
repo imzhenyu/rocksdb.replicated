@@ -47,7 +47,9 @@ typedef SSIZE_T ssize_t;
 // in fact, we could use that one
 #define ROCKSDB_PRIszt "Iu"
 
-#define __attribute__(A)
+# ifndef __attribute__
+# define __attribute__(A)
+# endif
 
 #ifdef ZLIB
 #include <zlib.h>

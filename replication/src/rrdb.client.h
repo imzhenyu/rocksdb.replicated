@@ -19,8 +19,8 @@ public:
     
     // from requests to partition index
     // PLEASE DO RE-DEFINE THEM IN A SUB CLASS!!!
-	virtual int get_partition_index(const update_request& key) { return 0;};
-	virtual int get_partition_index(const ::dsn::blob& key) { return 0;};
+    virtual int get_partition_index(const update_request& key) { return 0;};
+    virtual int get_partition_index(const ::dsn::blob& key) { return 0;};
 
     // ---------- call RPC_RRDB_RRDB_PUT ------------
     // - synchronous 
@@ -295,7 +295,7 @@ public:
         const ::dsn::blob& key, 
         __out_param read_response& resp, 
         int timeout_milliseconds = 0, 
-		::dsn::replication::read_semantic_t read_semantic = ::dsn::replication::read_semantic_t::ReadLastUpdate 
+        ::dsn::replication::read_semantic_t read_semantic = ::dsn::replication::read_semantic_t::ReadLastUpdate 
         )
     {
         auto resp_task = ::dsn::replication::replication_app_client_base::read<::dsn::blob, read_response>(
@@ -307,7 +307,7 @@ public:
             nullptr,
             timeout_milliseconds,
             0, 
-			read_semantic 
+            read_semantic 
             );
         resp_task->wait();
         if (resp_task->error() == ::dsn::ERR_OK)
@@ -323,7 +323,7 @@ public:
         void* context = nullptr,
         int timeout_milliseconds = 0, 
         int reply_hash = 0,  
-		::dsn::replication::read_semantic_t read_semantic = ::dsn::replication::read_semantic_t::ReadLastUpdate 
+        ::dsn::replication::read_semantic_t read_semantic = ::dsn::replication::read_semantic_t::ReadLastUpdate 
         )
     {
         return ::dsn::replication::replication_app_client_base::read<rrdb_client, ::dsn::blob, read_response>(
@@ -335,7 +335,7 @@ public:
             context,
             timeout_milliseconds,
             reply_hash, 
-			read_semantic 
+            read_semantic 
             );
     }
 
@@ -356,7 +356,7 @@ public:
         std::shared_ptr<::dsn::blob>& key,         
         int timeout_milliseconds = 0, 
         int reply_hash = 0, 
-		::dsn::replication::read_semantic_t read_semantic = ::dsn::replication::read_semantic_t::ReadLastUpdate 
+        ::dsn::replication::read_semantic_t read_semantic = ::dsn::replication::read_semantic_t::ReadLastUpdate 
         )
     {
         return ::dsn::replication::replication_app_client_base::read<rrdb_client, ::dsn::blob, read_response>(
@@ -367,7 +367,7 @@ public:
             &rrdb_client::end_get2, 
             timeout_milliseconds,
             reply_hash, 
-			read_semantic 
+            read_semantic 
             );
     }
 
