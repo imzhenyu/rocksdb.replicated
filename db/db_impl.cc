@@ -2021,6 +2021,9 @@ Status DBImpl::GetLearningState(/*out*/ SequenceNumber& start,
                 else if (start <= v->largest_seqno)
                 {
                     // TODO: handle this case
+                    printf("we assume this is impossbile for now as we assume the flush point for level 0 is deterministic"
+                        " as long as the configuration is the same across the replicas.");
+                    return Status::Aborted();
                 }
 
                 // file sequence range is not covered by [start, infinite)
@@ -2080,14 +2083,52 @@ Status DBImpl::ApplyLearningState(
         VersionEdit edit;
         Slice ev(edit_encoded.c_str(), edit_encoded.length());
         edit.DecodeFrom(ev);
-
+        
         // apply edit first
         if (edit.NumEntries() > 0)
         {
             mutex_.Lock();
+
+            Status status = Status::OK();
             const MutableCFOptions mutable_cf_options =
                 *cfd->GetLatestMutableCFOptions();
-            auto status = versions_->LogAndApply(cfd, mutable_cf_options, &edit, &mutex_);
+            
+            //update new file numbers if necessary
+            auto new_files = edit.GetNewFiles();
+            uint64_t min_fno = ~0ULL, max_fno = 0;
+            for (auto& kv : new_files)
+            {
+                if (kv.second.fd.GetNumber() < min_fno)
+                    min_fno = kv.second.fd.GetNumber();
+                if (kv.second.fd.GetNumber() > max_fno)
+                    max_fno = kv.second.fd.GetNumber();
+            }
+
+            if (versions_->current_next_file_number() > min_fno)
+            {
+                uint64_t fno_inc = max_fno - min_fno + 1;
+                for (auto& kv : new_files)
+                {
+                    auto& nf = kv.second;
+                    std::string oldfn = MakeTableFileName(dbname_, nf.fd.GetNumber());
+                    std::string newfn = MakeTableFileName(dbname_, nf.fd.GetNumber() + fno_inc);
+
+                    status = env_->RenameFile(oldfn, newfn);
+                    if (!status.ok())
+                    {
+                        // TODO: delete obsolete files?
+                        mutex_.Unlock();
+                        return status;
+                    }
+
+                    nf.fd = FileDescriptor(nf.fd.GetNumber() + fno_inc, nf.fd.GetPathId(), nf.fd.GetFileSize());
+                }
+                
+                // increase fno to prevent future confliction
+                while (versions_->NewFileNumber() <= fno_inc + max_fno);
+            }
+
+            status = versions_->LogAndApply(cfd, mutable_cf_options, &edit, &mutex_);
             if (!status.ok())
             {
                 mutex_.Unlock();

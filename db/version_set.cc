@@ -2061,6 +2061,7 @@ Status VersionSet::LogAndApply(ColumnFamilyData* column_family_data,
     manifest_file_number_ = pending_manifest_file_number_;
     manifest_file_size_ = new_manifest_file_size;
     prev_log_number_ = edit->prev_log_number_;
+    last_sequence_ = edit->last_sequence_;
     last_durable_sequence_ = edit->last_sequence_;
   } else {
     Log(InfoLogLevel::ERROR_LEVEL, db_options_->info_log,
