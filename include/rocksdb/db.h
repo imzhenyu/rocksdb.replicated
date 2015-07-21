@@ -15,6 +15,13 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
+
+# if defined(OS_WIN) || defined(_WIN32)
+# ifndef __attribute__
+# define __attribute__(A)
+# endif
+# endif
+
 #include "rocksdb/metadata.h"
 #include "rocksdb/version.h"
 #include "rocksdb/iterator.h"
@@ -33,6 +40,7 @@ struct ReadOptions;
 struct WriteOptions;
 struct FlushOptions;
 struct CompactionOptions;
+struct CompactRangeOptions;
 struct TableProperties;
 class WriteBatch;
 class Env;
@@ -398,10 +406,12 @@ class DB {
   //
   // The results may not include the sizes of recently written data.
   virtual void GetApproximateSizes(ColumnFamilyHandle* column_family,
-                                   const Range* range, int n,
-                                   uint64_t* sizes) = 0;
-  virtual void GetApproximateSizes(const Range* range, int n, uint64_t* sizes) {
-    GetApproximateSizes(DefaultColumnFamily(), range, n, sizes);
+                                   const Range* range, int n, uint64_t* sizes,
+                                   bool include_memtable = false) = 0;
+  virtual void GetApproximateSizes(const Range* range, int n, uint64_t* sizes,
+                                   bool include_memtable = false) {
+    GetApproximateSizes(DefaultColumnFamily(), range, n, sizes,
+                        include_memtable);
   }
 
   // Compact the underlying storage for the key range [*begin,*end].
@@ -414,25 +424,42 @@ class DB {
   // begin==nullptr is treated as a key before all keys in the database.
   // end==nullptr is treated as a key after all keys in the database.
   // Therefore the following call will compact the entire database:
-  //    db->CompactRange(nullptr, nullptr);
+  //    db->CompactRange(options, nullptr, nullptr);
   // Note that after the entire database is compacted, all data are pushed
-  // down to the last level containing any data. If the total data size
-  // after compaction is reduced, that level might not be appropriate for
-  // hosting all the files. In this case, client could set reduce_level
-  // to true, to move the files back to the minimum level capable of holding
-  // the data set or a given level (specified by non-negative target_level).
-  // Compaction outputs should be placed in options.db_paths[target_path_id].
-  // Behavior is undefined if target_path_id is out of range.
-  virtual Status CompactRange(ColumnFamilyHandle* column_family,
-                              const Slice* begin, const Slice* end,
-                              bool reduce_level = false, int target_level = -1,
-                              uint32_t target_path_id = 0) = 0;
-  virtual Status CompactRange(const Slice* begin, const Slice* end,
-                              bool reduce_level = false, int target_level = -1,
-                              uint32_t target_path_id = 0) {
-    return CompactRange(DefaultColumnFamily(), begin, end, reduce_level,
-                        target_level, target_path_id);
+  // down to the last level containing any data. If the total data size after
+  // compaction is reduced, that level might not be appropriate for hosting all
+  // the files. In this case, client could set options.change_level to true, to
+  // move the files back to the minimum level capable of holding the data set
+  // or a given level (specified by non-negative options.target_level).
+  virtual Status CompactRange(const CompactRangeOptions& options,
+                              ColumnFamilyHandle* column_family,
+                              const Slice* begin, const Slice* end) = 0;
+  virtual Status CompactRange(const CompactRangeOptions& options,
+                              const Slice* begin, const Slice* end) {
+    return CompactRange(options, DefaultColumnFamily(), begin, end);
   }
+
+  __attribute__((deprecated)) virtual Status
+      CompactRange(ColumnFamilyHandle* column_family, const Slice* begin,
+                   const Slice* end, bool change_level = false,
+                   int target_level = -1, uint32_t target_path_id = 0) {
+    CompactRangeOptions options;
+    options.change_level = change_level;
+    options.target_level = target_level;
+    options.target_path_id = target_path_id;
+    return CompactRange(options, column_family, begin, end);
+  }
+  __attribute__((deprecated)) virtual Status
+      CompactRange(const Slice* begin, const Slice* end,
+                   bool change_level = false, int target_level = -1,
+                   uint32_t target_path_id = 0) {
+    CompactRangeOptions options;
+    options.change_level = change_level;
+    options.target_level = target_level;
+    options.target_path_id = target_path_id;
+    return CompactRange(options, DefaultColumnFamily(), begin, end);
+  }
+
   virtual Status SetOptions(ColumnFamilyHandle* column_family,
       const std::unordered_map<std::string, std::string>& new_options) {
     return Status::NotSupported("Not implemented");
@@ -486,12 +513,17 @@ class DB {
   // Get Env object from the DB
   virtual Env* GetEnv() const = 0;
 
-  // Get DB Options that we use
+  // Get DB Options that we use.  During the process of opening the
+  // column family, the options provided when calling DB::Open() or
+  // DB::CreateColumnFamily() will have been "sanitized" and transformed
+  // in an implementation-defined manner.
   virtual const Options& GetOptions(ColumnFamilyHandle* column_family)
       const = 0;
   virtual const Options& GetOptions() const {
     return GetOptions(DefaultColumnFamily());
   }
+
+  virtual const DBOptions& GetDBOptions() const = 0;
 
   // Flush all mem-table data.
   virtual Status Flush(const FlushOptions& options,
@@ -583,6 +615,8 @@ class DB {
       const TransactionLogIterator::ReadOptions&
           read_options = TransactionLogIterator::ReadOptions()) = 0;
 
+// Windows API macro interference
+#undef DeleteFile
   // Delete the file name from the db directory and update the internal state to
   // reflect that. Supports deletion of sst and log files only. 'name' must be
   // path relative to the db directory. eg. 000001.sst, /archive/000003.log
@@ -612,7 +646,7 @@ class DB {
   // Sets the globally unique ID created at database creation time by invoking
   // Env::GenerateUniqueId(), in identity. Returns Status::OK if identity could
   // be set properly
-  virtual Status GetDbIdentity(std::string& identity) = 0;
+  virtual Status GetDbIdentity(std::string& identity) const = 0;
 
   // Returns default column family handle
   virtual ColumnFamilyHandle* DefaultColumnFamily() const = 0;
@@ -624,6 +658,9 @@ class DB {
     return GetPropertiesOfAllTables(DefaultColumnFamily(), props);
   }
 #endif  // ROCKSDB_LITE
+
+  // Needed for StackableDB
+  virtual DB* GetRootDB() { return this; }
 
  private:
   // No copying allowed

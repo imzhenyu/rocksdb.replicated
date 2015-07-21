@@ -39,6 +39,7 @@
 #include "table/meta_blocks.h"
 #include "table/table_builder.h"
 
+#include "util/string_util.h"
 #include "util/coding.h"
 #include "util/compression.h"
 #include "util/crc32c.h"
@@ -208,7 +209,7 @@ class HashIndexBuilder : public IndexBuilder {
       pending_entry_index_ = static_cast<uint32_t>(current_restart_index_);
     } else {
       // entry number increments when keys share the prefix reside in
-      // differnt data blocks.
+      // different data blocks.
       auto last_restart_index = pending_entry_index_ + pending_block_num_ - 1;
       assert(last_restart_index <= current_restart_index_);
       if (last_restart_index != current_restart_index_) {
@@ -373,17 +374,20 @@ Slice CompressBlock(const Slice& raw,
 // kBlockBasedTableMagicNumber was picked by running
 //    echo rocksdb.table.block_based | sha1sum
 // and taking the leading 64 bits.
-// Please note that kBlockBasedTableMagicNumber may also be accessed by
-// other .cc files so it have to be explicitly declared with "extern".
-extern const uint64_t kBlockBasedTableMagicNumber = 0x88e241b785f4cff7ull;
+// Please note that kBlockBasedTableMagicNumber may also be accessed by other
+// .cc files
+// for that reason we declare it extern in the header but to get the space
+// allocated
+// it must be not extern in one place.
+const uint64_t kBlockBasedTableMagicNumber = 0x88e241b785f4cff7ull;
 // We also support reading and writing legacy block based table format (for
 // backwards compatibility)
-extern const uint64_t kLegacyBlockBasedTableMagicNumber = 0xdb4775248b80fb57ull;
+const uint64_t kLegacyBlockBasedTableMagicNumber = 0xdb4775248b80fb57ull;
 
 // A collector that collects properties of interest to block-based table.
 // For now this class looks heavy-weight since we only write one additional
 // property.
-// But in the forseeable future, we will add more and more properties that are
+// But in the foreseeable future, we will add more and more properties that are
 // specific to block-based table.
 class BlockBasedTableBuilder::BlockBasedTablePropertiesCollector
     : public IntTblPropCollector {
@@ -702,8 +706,8 @@ Status BlockBasedTableBuilder::InsertBlockInCache(const Slice& block_contents,
               (end - r->compressed_cache_key_prefix));
 
     // Insert into compressed block cache.
-    cache_handle = block_cache_compressed->Insert(key, block, block->size(),
-                                                  &DeleteCachedBlock);
+    cache_handle = block_cache_compressed->Insert(
+        key, block, block->usable_size(), &DeleteCachedBlock);
     block_cache_compressed->Release(cache_handle);
 
     // Invalidate OS cache.
@@ -830,28 +834,6 @@ Status BlockBasedTableBuilder::Finish() {
     }
   }
 
-  // Print out the table stats
-  if (ok()) {
-    // user collected properties
-    std::string user_collected;
-    user_collected.reserve(1024);
-    for (const auto& collector : r->table_properties_collectors) {
-      for (const auto& prop : collector->GetReadableProperties()) {
-        user_collected.append(prop.first);
-        user_collected.append("=");
-        user_collected.append(prop.second);
-        user_collected.append("; ");
-      }
-    }
-
-    Log(InfoLogLevel::INFO_LEVEL, r->ioptions.info_log,
-        "Table was constructed:\n"
-        "  [basic properties]: %s\n"
-        "  [user collected properties]: %s",
-        r->props.ToString().c_str(),
-        user_collected.c_str());
-  }
-
   return r->status;
 }
 
@@ -867,6 +849,25 @@ uint64_t BlockBasedTableBuilder::NumEntries() const {
 
 uint64_t BlockBasedTableBuilder::FileSize() const {
   return rep_->offset;
+}
+
+bool BlockBasedTableBuilder::NeedCompact() const {
+  for (const auto& collector : rep_->table_properties_collectors) {
+    if (collector->NeedCompact()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+TableProperties BlockBasedTableBuilder::GetTableProperties() const {
+  TableProperties ret = rep_->props;
+  for (const auto& collector : rep_->table_properties_collectors) {
+    for (const auto& prop : collector->GetReadableProperties()) {
+      ret.user_collected_properties.insert(prop);
+    }
+  }
+  return ret;
 }
 
 const std::string BlockBasedTable::kFilterBlockPrefix = "filter.";

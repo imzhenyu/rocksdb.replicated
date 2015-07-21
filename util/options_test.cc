@@ -51,12 +51,12 @@ Options PrintAndGetOptions(size_t total_write_buffer_limit,
   StderrLogger logger;
 
   if (FLAGS_enable_print) {
-    printf(
-        "---- total_write_buffer_limit: %zu "
-        "read_amplification_threshold: %d write_amplification_threshold: %d "
-        "target_db_size %" PRIu64 " ----\n",
-        total_write_buffer_limit, read_amplification_threshold,
-        write_amplification_threshold, target_db_size);
+    printf("---- total_write_buffer_limit: %" ROCKSDB_PRIszt
+           " "
+           "read_amplification_threshold: %d write_amplification_threshold: %d "
+           "target_db_size %" PRIu64 " ----\n",
+           total_write_buffer_limit, read_amplification_threshold,
+           write_amplification_threshold, target_db_size);
   }
 
   Options options =
@@ -96,6 +96,7 @@ TEST_F(OptionsTest, GetOptionsFromMapTest) {
       {"write_buffer_size", "1"},
       {"max_write_buffer_number", "2"},
       {"min_write_buffer_number_to_merge", "3"},
+      {"max_write_buffer_number_to_maintain", "99"},
       {"compression", "kSnappyCompression"},
       {"compression_per_level",
        "kNoCompression:"
@@ -172,6 +173,7 @@ TEST_F(OptionsTest, GetOptionsFromMapTest) {
     {"advise_random_on_open", "true"},
     {"use_adaptive_mutex", "false"},
     {"bytes_per_sync", "47"},
+    {"wal_bytes_per_sync", "48"},
   };
 
   ColumnFamilyOptions base_cf_opt;
@@ -181,6 +183,7 @@ TEST_F(OptionsTest, GetOptionsFromMapTest) {
   ASSERT_EQ(new_cf_opt.write_buffer_size, 1U);
   ASSERT_EQ(new_cf_opt.max_write_buffer_number, 2);
   ASSERT_EQ(new_cf_opt.min_write_buffer_number_to_merge, 3);
+  ASSERT_EQ(new_cf_opt.max_write_buffer_number_to_maintain, 99);
   ASSERT_EQ(new_cf_opt.compression, kSnappyCompression);
   ASSERT_EQ(new_cf_opt.compression_per_level.size(), 6U);
   ASSERT_EQ(new_cf_opt.compression_per_level[0], kNoCompression);
@@ -278,6 +281,7 @@ TEST_F(OptionsTest, GetOptionsFromMapTest) {
   ASSERT_EQ(new_db_opt.advise_random_on_open, true);
   ASSERT_EQ(new_db_opt.use_adaptive_mutex, false);
   ASSERT_EQ(new_db_opt.bytes_per_sync, static_cast<uint64_t>(47));
+  ASSERT_EQ(new_db_opt.wal_bytes_per_sync, static_cast<uint64_t>(48));
 }
 #endif  // !ROCKSDB_LITE
 
@@ -323,26 +327,33 @@ TEST_F(OptionsTest, GetColumnFamilyOptionsFromStringTest) {
   // Missing option name
   ASSERT_NOK(GetColumnFamilyOptionsFromString(base_cf_opt,
              "write_buffer_size=13; =100;", &new_cf_opt));
+
+  const int64_t kilo = 1024UL;
+  const int64_t mega = 1024 * kilo;
+  const int64_t giga = 1024 * mega;
+  const int64_t tera = 1024 * giga;
+
   // Units (k)
   ASSERT_OK(GetColumnFamilyOptionsFromString(base_cf_opt,
             "memtable_prefix_bloom_bits=14k;max_write_buffer_number=-15K",
             &new_cf_opt));
-  ASSERT_EQ(new_cf_opt.memtable_prefix_bloom_bits, 14UL*1024UL);
-  ASSERT_EQ(new_cf_opt.max_write_buffer_number, -15*1024);
+  ASSERT_EQ(new_cf_opt.memtable_prefix_bloom_bits, 14UL * kilo);
+  ASSERT_EQ(new_cf_opt.max_write_buffer_number, -15 * kilo);
   // Units (m)
   ASSERT_OK(GetColumnFamilyOptionsFromString(base_cf_opt,
             "max_write_buffer_number=16m;inplace_update_num_locks=17M",
             &new_cf_opt));
-  ASSERT_EQ(new_cf_opt.max_write_buffer_number, 16*1024*1024);
-  ASSERT_EQ(new_cf_opt.inplace_update_num_locks, 17*1024UL*1024UL);
+  ASSERT_EQ(new_cf_opt.max_write_buffer_number, 16 * mega);
+  ASSERT_EQ(new_cf_opt.inplace_update_num_locks, 17 * mega);
   // Units (g)
   ASSERT_OK(GetColumnFamilyOptionsFromString(
       base_cf_opt,
       "write_buffer_size=18g;prefix_extractor=capped:8;"
       "arena_block_size=19G",
       &new_cf_opt));
-  ASSERT_EQ(new_cf_opt.write_buffer_size, 18*1024UL*1024UL*1024UL);
-  ASSERT_EQ(new_cf_opt.arena_block_size, 19*1024UL*1024UL*1024UL);
+
+  ASSERT_EQ(new_cf_opt.write_buffer_size, 18 * giga);
+  ASSERT_EQ(new_cf_opt.arena_block_size, 19 * giga);
   ASSERT_TRUE(new_cf_opt.prefix_extractor.get() != nullptr);
   std::string prefix_name(new_cf_opt.prefix_extractor->Name());
   ASSERT_EQ(prefix_name, "rocksdb.CappedPrefix.8");
@@ -350,8 +361,8 @@ TEST_F(OptionsTest, GetColumnFamilyOptionsFromStringTest) {
   // Units (t)
   ASSERT_OK(GetColumnFamilyOptionsFromString(base_cf_opt,
             "write_buffer_size=20t;arena_block_size=21T", &new_cf_opt));
-  ASSERT_EQ(new_cf_opt.write_buffer_size, 20*1024UL*1024UL*1024UL*1024UL);
-  ASSERT_EQ(new_cf_opt.arena_block_size, 21*1024UL*1024UL*1024UL*1024UL);
+  ASSERT_EQ(new_cf_opt.write_buffer_size, 20 * tera);
+  ASSERT_EQ(new_cf_opt.arena_block_size, 21 * tera);
 
   // Nested block based table options
   // Emtpy

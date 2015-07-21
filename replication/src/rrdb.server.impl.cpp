@@ -16,84 +16,64 @@ namespace dsn {
 
         void rrdb_service_impl::on_put(const update_request& update, ::dsn::service::rpc_replier<int>& reply)
         {
-            if (_is_open)
-            {
-                rocksdb::WriteOptions opts = _wt_opts;
-                opts.given_sequence_number = static_cast<rocksdb::SequenceNumber>(_last_committed_decree + 1);
+            dassert(_is_open, "rrdb service %s is not ready", data_dir().c_str());
+            
+            rocksdb::WriteOptions opts = _wt_opts;
+            opts.given_sequence_number = static_cast<rocksdb::SequenceNumber>(_last_committed_decree + 1);
 
-                rocksdb::Slice skey(update.key.data(), update.key.length());
-                rocksdb::Slice svalue(update.value.data(), update.value.length());
-                rocksdb::Status status = _db->Put(opts, skey, svalue);
-                reply(status.code());
+            rocksdb::Slice skey(update.key.data(), update.key.length());
+            rocksdb::Slice svalue(update.value.data(), update.value.length());
+            rocksdb::Status status = _db->Put(opts, skey, svalue);
+            reply(status.code());
 
-                ++_last_committed_decree;
-            }
-            else
-            {
-                reply(ERR_SERVICE_NOT_ACTIVE);
-            }
+            ++_last_committed_decree;
         }
 
         void rrdb_service_impl::on_remove(const ::dsn::blob& key, ::dsn::service::rpc_replier<int>& reply)
         {
-            if (_is_open)
-            {
-                rocksdb::WriteOptions opts = _wt_opts;
-                opts.given_sequence_number = static_cast<rocksdb::SequenceNumber>(_last_committed_decree + 1);
+            dassert(_is_open, "rrdb service %s is not ready", data_dir().c_str());
+            
+            rocksdb::WriteOptions opts = _wt_opts;
+            opts.given_sequence_number = static_cast<rocksdb::SequenceNumber>(_last_committed_decree + 1);
 
-                rocksdb::Slice skey(key.data(), key.length());
-                rocksdb::Status status = _db->Delete(opts, skey);
-                reply(status.code());
+            rocksdb::Slice skey(key.data(), key.length());
+            rocksdb::Status status = _db->Delete(opts, skey);
+            reply(status.code());
 
-                ++_last_committed_decree;
-            }
-            else
-            {
-                reply(ERR_SERVICE_NOT_ACTIVE);
-            }
+            ++_last_committed_decree;
         }
 
         void rrdb_service_impl::on_merge(const update_request& update, ::dsn::service::rpc_replier<int>& reply)
         {
-            if (_is_open)
-            {
-                rocksdb::WriteOptions opts = _wt_opts;
-                opts.given_sequence_number = static_cast<rocksdb::SequenceNumber>(_last_committed_decree + 1);
+            dassert(_is_open, "rrdb service %s is not ready", data_dir().c_str());
+            
+            rocksdb::WriteOptions opts = _wt_opts;
+            opts.given_sequence_number = static_cast<rocksdb::SequenceNumber>(_last_committed_decree + 1);
 
-                rocksdb::Slice skey(update.key.data(), update.key.length());
-                rocksdb::Slice svalue(update.value.data(), update.value.length());
-                rocksdb::Status status = _db->Merge(opts, skey, svalue);
-                reply(status.code());
+            rocksdb::Slice skey(update.key.data(), update.key.length());
+            rocksdb::Slice svalue(update.value.data(), update.value.length());
+            rocksdb::Status status = _db->Merge(opts, skey, svalue);
+            reply(status.code());
 
-                ++_last_committed_decree;
-            }
-            else
-            {
-                reply(ERR_SERVICE_NOT_ACTIVE);
-            }
+            ++_last_committed_decree;
         }
 
         void rrdb_service_impl::on_get(const ::dsn::blob& key, ::dsn::service::rpc_replier<read_response>& reply)
         {
             read_response resp;
 
-            if (_is_open)
-            {
-                rocksdb::Slice skey(key.data(), key.length());
-                rocksdb::Status status = _db->Get(_rd_opts, skey, &resp.value);
-                resp.error = status.code();
-            }
-            else
-            {
-                resp.error = ERR_SERVICE_NOT_ACTIVE;
-            }
+            dassert(_is_open, "rrdb service %s is not ready", data_dir().c_str());
+
+            rocksdb::Slice skey(key.data(), key.length());
+            rocksdb::Status status = _db->Get(_rd_opts, skey, &resp.value);
+            resp.error = status.code();
+
             reply(resp);
         }
 
         int  rrdb_service_impl::open(bool create_new)
         {
-            if (_is_open)
-                return ERR_SERVICE_ALREADY_RUNNING;
+            dassert(!_is_open, "rrdb service %s is already opened", data_dir().c_str());
 
             rocksdb::Options opts;
             opts.create_if_missing = create_new;
@@ -112,8 +92,7 @@ namespace dsn {
 
         int  rrdb_service_impl::close(bool clear_state)
         {
-            if (!_is_open)
-                return ERR_SERVICE_NOT_ACTIVE;
+            dassert(_is_open, "rrdb service %s is already closed", data_dir().c_str());
 
             _is_open = false;
             delete _db;
@@ -130,8 +109,7 @@ namespace dsn {
 
         int  rrdb_service_impl::flush(bool force)
         {
-            if (!_is_open)
-                return ERR_SERVICE_NOT_ACTIVE;
+            dassert(_is_open, "rrdb service %s is not ready", data_dir().c_str());
 
             rocksdb::FlushOptions opts;
             opts.wait = force;
@@ -150,8 +128,7 @@ namespace dsn {
             const blob& learn_req, 
             __out_param::dsn::replication::learn_state& state)
         {
-            if (!_is_open)
-                return ERR_SERVICE_NOT_ACTIVE;
+            dassert(_is_open, "rrdb service %s is not ready", data_dir().c_str());
 
             rocksdb::SequenceNumber start0 = start;
             rocksdb::SequenceNumber end;
@@ -177,8 +154,7 @@ namespace dsn {
 
         int  rrdb_service_impl::apply_learn_state(::dsn::replication::learn_state& state)
         {
-            if (!_is_open)
-                return ERR_SERVICE_NOT_ACTIVE;
+            dassert(_is_open, "rrdb service %s is not ready", data_dir().c_str());
 
             binary_reader reader(state.meta[0]);
 
@@ -195,7 +171,7 @@ namespace dsn {
             reader.read(mem_state);
                         
             if (mem_state.size() == 0 && state.files.size() == 0)
-                return ERR_OK;
+                return 0;
             else
             {
                 if (start == 0)
@@ -236,10 +212,9 @@ namespace dsn {
                 
         ::dsn::replication::decree rrdb_service_impl::last_durable_decree() const
         {
-            if (_is_open)
-                return _db->GetLatestDurableSequenceNumber();
-            else
-                return 0;
+            dassert(_is_open, "rrdb service %s is not ready", data_dir().c_str());
+
+            return _db->GetLatestDurableSequenceNumber();
         }
     }
 }

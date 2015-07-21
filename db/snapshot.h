@@ -8,6 +8,8 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #pragma once
+#include <vector>
+
 #include "rocksdb/db.h"
 
 namespace rocksdb {
@@ -47,8 +49,8 @@ class SnapshotList {
   SnapshotImpl* oldest() const { assert(!empty()); return list_.next_; }
   SnapshotImpl* newest() const { assert(!empty()); return list_.prev_; }
 
-  const SnapshotImpl* New(SequenceNumber seq, uint64_t unix_time) {
-    SnapshotImpl* s = new SnapshotImpl;
+  const SnapshotImpl* New(SnapshotImpl* s, SequenceNumber seq,
+                          uint64_t unix_time) {
     s->number_ = seq;
     s->unix_time_ = unix_time;
     s->list_ = this;
@@ -60,22 +62,26 @@ class SnapshotList {
     return s;
   }
 
+  // Do not responsible to free the object.
   void Delete(const SnapshotImpl* s) {
     assert(s->list_ == this);
     s->prev_->next_ = s->next_;
     s->next_->prev_ = s->prev_;
     count_--;
-    delete s;
   }
 
   // retrieve all snapshot numbers. They are sorted in ascending order.
-  void getAll(std::vector<SequenceNumber>& ret) {
-    if (empty()) return;
+  std::vector<SequenceNumber> GetAll() {
+    std::vector<SequenceNumber> ret;
+    if (empty()) {
+      return ret;
+    }
     SnapshotImpl* s = &list_;
     while (s->next_ != &list_) {
       ret.push_back(s->next_->number_);
-      s = s ->next_;
+      s = s->next_;
     }
+    return ret;
   }
 
   // get the sequence number of the most recent snapshot

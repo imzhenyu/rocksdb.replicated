@@ -254,7 +254,7 @@ void DBIter::FindNextUserEntryInternal(bool skipping) {
     }
     // If we have sequentially iterated via numerous keys and still not
     // found the next user-key, then it is better to seek so that we can
-    // avoid too many key comparisons. We seek to the last occurence of
+    // avoid too many key comparisons. We seek to the last occurrence of
     // our current key by looking for sequence number 0.
     if (skipping && num_skipped > max_skip_) {
       num_skipped = 0;
@@ -664,7 +664,28 @@ void DBIter::SeekToLast() {
     PERF_TIMER_GUARD(seek_internal_seek_time);
     iter_->SeekToLast();
   }
+  // When the iterate_upper_bound is set to a value,
+  // it will seek to the last key before the
+  // ReadOptions.iterate_upper_bound
+  if (iter_->Valid() && iterate_upper_bound_ != nullptr) {
+    saved_key_.SetKey(*iterate_upper_bound_);
+    std::string last_key;
+    AppendInternalKey(&last_key,
+                      ParsedInternalKey(saved_key_.GetKey(), kMaxSequenceNumber,
+                                        kValueTypeForSeek));
 
+    iter_->Seek(last_key);
+
+    if (!iter_->Valid()) {
+      iter_->SeekToLast();
+    } else {
+      iter_->Prev();
+      if (!iter_->Valid()) {
+        valid_ = false;
+        return;
+      }
+    }
+  }
   PrevInternal();
 }
 

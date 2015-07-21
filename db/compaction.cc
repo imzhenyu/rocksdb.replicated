@@ -16,6 +16,7 @@
 #include <inttypes.h>
 #include <vector>
 
+#include "rocksdb/compaction_filter.h"
 #include "db/column_family.h"
 #include "util/logging.h"
 #include "util/sync_point.h"
@@ -140,7 +141,7 @@ bool Compaction::InputCompressionMatchesOutput() const {
     return true;
   }
   TEST_SYNC_POINT("Compaction::InputCompressionMatchesOutput:DidntMatch");
-  return false;
+  return matches;
 }
 
 bool Compaction::IsTrivialMove() const {
@@ -148,10 +149,32 @@ bool Compaction::IsTrivialMove() const {
   // Otherwise, the move could create a parent file that will require
   // a very expensive merge later on.
   // If start_level_== output_level_, the purpose is to force compaction
-  // filter to be applied to that level, and thus cannot be a trivia move.
+  // filter to be applied to that level, and thus cannot be a trivial move.
+
+  // Check if start level have files with overlapping ranges
+  if (start_level_ == 0 &&
+      input_version_->storage_info()->level0_non_overlapping() == false) {
+    // We cannot move files from L0 to L1 if the files are overlapping
+    return false;
+  }
+
+  if (is_manual_compaction_ &&
+      (cfd_->ioptions()->compaction_filter != nullptr ||
+       cfd_->ioptions()->compaction_filter_factory != nullptr ||
+       cfd_->ioptions()->compaction_filter_factory_v2 != nullptr)) {
+    // This is a manual compaction and we have a compaction filter that should
+    // be executed, we cannot do a trivial move
+    return false;
+  }
+
+  // Used in universal compaction, where trivial move can be done if the
+  // input files are non overlapping
+  if (cfd_->ioptions()->compaction_options_universal.allow_trivial_move) {
+    return is_trivial_move_;
+  }
+
   return (start_level_ != output_level_ && num_input_levels() == 1 &&
-          num_input_files(0) == 1 &&
-          input(0, 0)->fd.GetPathId() == GetOutputPathId() &&
+          input(0, 0)->fd.GetPathId() == output_path_id() &&
           InputCompressionMatchesOutput() &&
           TotalFileSize(grandparents_) <= max_grandparent_overlap_bytes_);
 }
@@ -247,12 +270,23 @@ const char* Compaction::InputLevelSummary(
       is_first = false;
     }
     len += snprintf(scratch->buffer + len, sizeof(scratch->buffer) - len,
-                    "%zu@%d", input_level.size(), input_level.level);
+                    "%" ROCKSDB_PRIszt "@%d", input_level.size(),
+                    input_level.level);
   }
   snprintf(scratch->buffer + len, sizeof(scratch->buffer) - len,
            " files to L%d", output_level());
 
   return scratch->buffer;
+}
+
+uint64_t Compaction::CalculateTotalInputSize() const {
+  uint64_t size = 0;
+  for (auto& input_level : inputs_) {
+    for (auto f : input_level.files) {
+      size += f->fd.GetFileSize();
+    }
+  }
+  return size;
 }
 
 void Compaction::ReleaseCompactionFiles(Status status) {
@@ -312,22 +346,48 @@ void Compaction::Summary(char* output, int len) {
   snprintf(output + write, len - write, "]");
 }
 
-uint64_t Compaction::OutputFilePreallocationSize(
-    const MutableCFOptions& mutable_options) {
+uint64_t Compaction::OutputFilePreallocationSize() {
   uint64_t preallocation_size = 0;
 
-  if (cfd_->ioptions()->compaction_style == kCompactionStyleLevel) {
-    preallocation_size = mutable_options.MaxFileSizeForLevel(output_level());
+  if (cfd_->ioptions()->compaction_style == kCompactionStyleLevel ||
+      output_level() > 0) {
+    preallocation_size = max_output_file_size_;
   } else {
-    for (size_t level_iter = 0; level_iter < num_input_levels(); ++level_iter) {
-      for (const auto& f : inputs_[level_iter].files) {
-        preallocation_size += f->fd.GetFileSize();
-      }
+    // output_level() == 0
+    assert(num_input_levels() > 0);
+    for (const auto& f : inputs_[0].files) {
+      preallocation_size += f->fd.GetFileSize();
     }
   }
   // Over-estimate slightly so we don't end up just barely crossing
   // the threshold
   return preallocation_size * 1.1;
+}
+
+std::unique_ptr<CompactionFilter> Compaction::CreateCompactionFilter() const {
+  if (!cfd_->ioptions()->compaction_filter_factory) {
+    return nullptr;
+  }
+
+  CompactionFilter::Context context;
+  context.is_full_compaction = is_full_compaction_;
+  context.is_manual_compaction = is_manual_compaction_;
+  return cfd_->ioptions()->compaction_filter_factory->CreateCompactionFilter(
+      context);
+}
+
+std::unique_ptr<CompactionFilterV2>
+    Compaction::CreateCompactionFilterV2() const {
+  if (!cfd_->ioptions()->compaction_filter_factory_v2) {
+    return nullptr;
+  }
+
+  CompactionFilterContext context;
+  context.is_full_compaction = is_full_compaction_;
+  context.is_manual_compaction = is_manual_compaction_;
+  return
+    cfd_->ioptions()->compaction_filter_factory_v2->CreateCompactionFilterV2(
+        context);
 }
 
 }  // namespace rocksdb

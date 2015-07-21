@@ -9,7 +9,9 @@
 
 #include "rocksdb/env.h"
 
-#include <sys/time.h>
+#include <thread>
+#include "port/sys_time.h"
+
 #include "rocksdb/options.h"
 #include "util/arena.h"
 #include "util/autovector.h"
@@ -17,6 +19,11 @@
 namespace rocksdb {
 
 Env::~Env() {
+}
+
+uint64_t Env::GetThreadID() const {
+  std::hash<std::thread::id> hasher;
+  return hasher(std::this_thread::get_id());
 }
 
 SequentialFile::~SequentialFile() {
@@ -54,7 +61,13 @@ void Log(const InfoLogLevel log_level, Logger* info_log, const char* format,
   if (info_log && info_log->GetInfoLogLevel() <= log_level) {
     va_list ap;
     va_start(ap, format);
-    info_log->Logv(log_level, format, ap);
+
+    if (log_level == InfoLogLevel::HEADER_LEVEL) {
+      info_log->LogHeader(format, ap);
+    } else {
+      info_log->Logv(log_level, format, ap);
+    }
+
     va_end(ap);
   }
 }
@@ -249,8 +262,11 @@ void AssignEnvOptions(EnvOptions* env_options, const DBOptions& options) {
 
 }
 
-EnvOptions Env::OptimizeForLogWrite(const EnvOptions& env_options) const {
-  return env_options;
+EnvOptions Env::OptimizeForLogWrite(const EnvOptions& env_options,
+                                    const DBOptions& db_options) const {
+  EnvOptions optimized_env_options(env_options);
+  optimized_env_options.bytes_per_sync = db_options.wal_bytes_per_sync;
+  return optimized_env_options;
 }
 
 EnvOptions Env::OptimizeForManifestWrite(const EnvOptions& env_options) const {

@@ -10,21 +10,11 @@
 namespace rocksdb {
 
 #if defined(NPERF_CONTEXT) || defined(IOS_CROSS_COMPILE)
-PerfLevel perf_level = kEnableCount;
 // This is a dummy variable since some place references it
 PerfContext perf_context;
 #else
-__thread PerfLevel perf_level = kEnableCount;
 __thread PerfContext perf_context;
 #endif
-
-void SetPerfLevel(PerfLevel level) {
-  perf_level = level;
-}
-
-PerfLevel GetPerfLevel() {
-  return perf_level;
-}
 
 void PerfContext::Reset() {
 #if !defined(NPERF_CONTEXT) && !defined(IOS_CROSS_COMPILE)
@@ -53,9 +43,16 @@ void PerfContext::Reset() {
   find_next_user_entry_time = 0;
   write_pre_and_post_process_time = 0;
   write_memtable_time = 0;
+  write_delay_time = 0;
   db_mutex_lock_nanos = 0;
   db_condition_wait_nanos = 0;
   merge_operator_time_nanos = 0;
+  read_index_block_nanos = 0;
+  read_filter_block_nanos = 0;
+  new_table_block_iter_nanos = 0;
+  new_table_iterator_nanos = 0;
+  block_seek_nanos = 0;
+  find_table_nanos = 0;
 #endif
 }
 
@@ -79,7 +76,10 @@ std::string PerfContext::ToString() const {
      << OUTPUT(seek_internal_seek_time) << OUTPUT(find_next_user_entry_time)
      << OUTPUT(write_pre_and_post_process_time) << OUTPUT(write_memtable_time)
      << OUTPUT(db_mutex_lock_nanos) << OUTPUT(db_condition_wait_nanos)
-     << OUTPUT(merge_operator_time_nanos);
+     << OUTPUT(merge_operator_time_nanos) << OUTPUT(write_delay_time)
+     << OUTPUT(read_index_block_nanos) << OUTPUT(read_filter_block_nanos)
+     << OUTPUT(new_table_block_iter_nanos) << OUTPUT(new_table_iterator_nanos)
+     << OUTPUT(block_seek_nanos) << OUTPUT(find_table_nanos);
   return ss.str();
 #endif
 }

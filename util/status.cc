@@ -67,11 +67,11 @@ std::string Status::ToString() const {
     case kShutdownInProgress:
       type = "Shutdown in progress: ";
       break;
-    case kTimedOut:
-      type = "Operation timed out: ";
-      break;
     case kAborted:
       type = "Operation aborted: ";
+      break;
+    case kBusy:
+      type = "Resource busy: ";
       break;
     default:
       snprintf(tmp, sizeof(tmp), "Unknown code(%d): ",

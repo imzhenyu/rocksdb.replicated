@@ -92,11 +92,20 @@ class Cache {
   // its cache keys.
   virtual uint64_t NewId() = 0;
 
+  // sets the maximum configured capacity of the cache. When the new
+  // capacity is less than the old capacity and the existing usage is
+  // greater than new capacity, the implementation will do its best job to
+  // purge the released entries from the cache in order to lower the usage
+  virtual void SetCapacity(size_t capacity) = 0;
+
   // returns the maximum configured capacity of the cache
   virtual size_t GetCapacity() const = 0;
 
   // returns the memory size for the entries residing in the cache.
   virtual size_t GetUsage() const = 0;
+
+  // returns the memory size for the entries in use by the system
+  virtual size_t GetPinnedUsage() const = 0;
 
   // Call this on shutdown if you want to speed it up. Cache will disown
   // any underlying data and will not free it on delete. This call will leak

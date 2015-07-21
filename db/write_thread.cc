@@ -7,8 +7,7 @@
 
 namespace rocksdb {
 
-Status WriteThread::EnterWriteThread(WriteThread::Writer* w,
-                                     uint64_t expiration_time) {
+void WriteThread::EnterWriteThread(WriteThread::Writer* w) {
   // the following code block pushes the current writer "w" into the writer
   // queue "writers_" and wait until one of the following conditions met:
   // 1. the job of "w" has been done by some other writers.
@@ -16,48 +15,9 @@ Status WriteThread::EnterWriteThread(WriteThread::Writer* w,
   // 3. "w" timed-out.
   writers_.push_back(w);
 
-  bool timed_out = false;
   while (!w->done && w != writers_.front()) {
-    if (expiration_time == 0) {
-      w->cv.Wait();
-    } else if (w->cv.TimedWait(expiration_time)) {
-      if (w->in_batch_group) {
-        // then it means the front writer is currently doing the
-        // write on behalf of this "timed-out" writer.  Then it
-        // should wait until the write completes.
-        expiration_time = 0;
-      } else {
-        timed_out = true;
-        break;
-      }
-    }
+    w->cv.Wait();
   }
-
-  if (timed_out) {
-#ifndef NDEBUG
-    bool found = false;
-#endif
-    for (auto iter = writers_.begin(); iter != writers_.end(); iter++) {
-      if (*iter == w) {
-        writers_.erase(iter);
-#ifndef NDEBUG
-        found = true;
-#endif
-        break;
-      }
-    }
-#ifndef NDEBUG
-    assert(found);
-#endif
-    // writers_.front() might still be in cond_wait without a time-out.
-    // As a result, we need to signal it to wake it up.  Otherwise no
-    // one else will wake him up, and RocksDB will hang.
-    if (!writers_.empty()) {
-      writers_.front()->cv.Signal();
-    }
-    return Status::TimedOut();
-  }
-  return Status::OK();
 }
 
 void WriteThread::ExitWriteThread(WriteThread::Writer* w,
@@ -87,8 +47,9 @@ void WriteThread::ExitWriteThread(WriteThread::Writer* w,
 //
 // REQUIRES: Writer list must be non-empty
 // REQUIRES: First writer must have a non-nullptr batch
-void WriteThread::BuildBatchGroup(WriteThread::Writer** last_writer,
-                                  autovector<WriteBatch*>* write_batch_group) {
+size_t WriteThread::BuildBatchGroup(
+    WriteThread::Writer** last_writer,
+    autovector<WriteBatch*>* write_batch_group) {
   assert(!writers_.empty());
   Writer* first = writers_.front();
   assert(first->batch != nullptr);
@@ -105,6 +66,13 @@ void WriteThread::BuildBatchGroup(WriteThread::Writer** last_writer,
   }
 
   *last_writer = first;
+
+  if (first->has_callback) {
+    // TODO(agiardullo:) Batching not currently supported as this write may
+    // fail if the callback function decides to abort this write.
+    return size;
+  }
+
   std::deque<Writer*>::iterator iter = writers_.begin();
   ++iter;  // Advance past "first"
   for (; iter != writers_.end(); ++iter) {
@@ -120,9 +88,9 @@ void WriteThread::BuildBatchGroup(WriteThread::Writer** last_writer,
       break;
     }
 
-    if (w->timeout_hint_us < first->timeout_hint_us) {
-      // Do not include those writes with shorter timeout.  Otherwise, we might
-      // execute a write that should instead be aborted because of timeout.
+    if (w->has_callback) {
+      // Do not include writes which may be aborted if the callback does not
+      // succeed.
       break;
     }
 
@@ -142,6 +110,7 @@ void WriteThread::BuildBatchGroup(WriteThread::Writer** last_writer,
     w->in_batch_group = true;
     *last_writer = w;
   }
+  return size;
 }
 
 }  // namespace rocksdb

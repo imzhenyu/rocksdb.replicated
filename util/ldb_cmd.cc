@@ -15,6 +15,7 @@
 #include "rocksdb/write_batch.h"
 #include "rocksdb/cache.h"
 #include "rocksdb/table_properties.h"
+#include "port/dirent.h"
 #include "util/coding.h"
 #include "util/sst_dump_tool_imp.h"
 #include "util/string_util.h"
@@ -23,7 +24,6 @@
 
 #include <cstdlib>
 #include <ctime>
-#include <dirent.h>
 #include <limits>
 #include <sstream>
 #include <string>
@@ -441,7 +441,7 @@ void CompactorCommand::DoCommand() {
     end = new Slice(to_);
   }
 
-  db_->CompactRange(begin, end);
+  db_->CompactRange(CompactRangeOptions(), begin, end);
   exec_state_ = LDBCommandExecuteResult::Succeed("");
 
   delete begin;
@@ -519,7 +519,7 @@ void DBLoaderCommand::DoCommand() {
     cout << "Warning: " << bad_lines << " bad lines ignored." << endl;
   }
   if (compact_) {
-    db_->CompactRange(nullptr, nullptr);
+    db_->CompactRange(CompactRangeOptions(), nullptr, nullptr);
   }
 }
 
@@ -537,7 +537,7 @@ void DumpManifestFile(std::string file, bool verbose, bool hex) {
   // if VersionSet::DumpManifest() depends on any option done by
   // SanitizeOptions(), we need to initialize it manually.
   options.db_paths.emplace_back("dummy", 0);
-  WriteController wc;
+  WriteController wc(options.delayed_write_rate);
   WriteBuffer wb(options.db_write_buffer_size);
   VersionSet versions(dbname, &options, sopt, tc.get(), &wb, &wc);
   Status s = versions.DumpManifest(options, file, verbose, hex);
@@ -588,14 +588,18 @@ void ManifestDumpCommand::DoCommand() {
     bool found = false;
     // We need to find the manifest file by searching the directory
     // containing the db for files of the form MANIFEST_[0-9]+
-    DIR* d = opendir(db_path_.c_str());
+
+    auto CloseDir = [](DIR* p) { closedir(p); };
+    std::unique_ptr<DIR, decltype(CloseDir)> d(opendir(db_path_.c_str()),
+                                               CloseDir);
+
     if (d == nullptr) {
       exec_state_ =
           LDBCommandExecuteResult::Failed(db_path_ + " is not a directory");
       return;
     }
     struct dirent* entry;
-    while ((entry = readdir(d)) != nullptr) {
+    while ((entry = readdir(d.get())) != nullptr) {
       unsigned int match;
       unsigned long long num;
       if (sscanf(entry->d_name,
@@ -609,12 +613,10 @@ void ManifestDumpCommand::DoCommand() {
         } else {
           exec_state_ = LDBCommandExecuteResult::Failed(
               "Multiple MANIFEST files found; use --path to select one");
-          closedir(d);
           return;
         }
       }
     }
-    closedir(d);
   }
 
   if (verbose_) {
@@ -1146,7 +1148,7 @@ Status ReduceDBLevelsCommand::GetOldNumOfLevels(Options& opt,
   std::shared_ptr<Cache> tc(
       NewLRUCache(opt.max_open_files - 10, opt.table_cache_numshardbits));
   const InternalKeyComparator cmp(opt.comparator);
-  WriteController wc;
+  WriteController wc(opt.delayed_write_rate);
   WriteBuffer wb(opt.db_write_buffer_size);
   VersionSet versions(db_path_, &opt, soptions, tc.get(), &wb, &wc);
   std::vector<ColumnFamilyDescriptor> dummy;
@@ -1204,7 +1206,7 @@ void ReduceDBLevelsCommand::DoCommand() {
   }
   // Compact the whole DB to put all files to the highest level.
   fprintf(stdout, "Compacting the db...\n");
-  db_->CompactRange(nullptr, nullptr);
+  db_->CompactRange(CompactRangeOptions(), nullptr, nullptr);
   CloseDB();
 
   EnvOptions soptions;
@@ -1309,9 +1311,10 @@ void ChangeCompactionStyleCommand::DoCommand() {
           files_per_level.c_str());
 
   // manual compact into a single file and move the file to level 0
-  db_->CompactRange(nullptr, nullptr,
-                    true /* reduce level */,
-                    0    /* reduce to level 0 */);
+  CompactRangeOptions compact_options;
+  compact_options.change_level = true;
+  compact_options.target_level = 0;
+  db_->CompactRange(compact_options, nullptr, nullptr);
 
   // verify compaction result
   files_per_level = "";

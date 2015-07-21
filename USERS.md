@@ -15,7 +15,7 @@ Two different use cases at Linkedin are using RocksDB as a storage engine:
 Learn more about those use cases in a Tech Talk by Ankit Gupta and Naveen Somasundaram: http://www.youtube.com/watch?v=plqVp_OnSzg
 
 ## Yahoo
-Yahoo is using RocksDB as a storage engine for their biggest distributed data store Sherpa.
+Yahoo is using RocksDB as a storage engine for their biggest distributed data store Sherpa. Learn more about it here: http://yahooeng.tumblr.com/post/120730204806/sherpa-scales-new-heights
 
 ## CockroachDB
 CockroachDB is an open-source geo-replicated transactional database (still in development). They are using RocksDB as their storage engine. Check out their github: https://github.com/cockroachdb/cockroach
@@ -31,6 +31,6 @@ Learn more from Tech Talk by Reed Allman: http://www.youtube.com/watch?v=HTjt6oj
 ## Tango Me
 Tango is using RocksDB as a graph storage to store all users' connection data and other social activity data.
 
-# Turn
+## Turn
 Turn is using RocksDB as a storage layer for their key/value store, serving at peak 2.4MM QPS out of different datacenters.
 Check out our RocksDB Protobuf merge operator at: https://github.com/vladb38/rocksdb_protobuf
