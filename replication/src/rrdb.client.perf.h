@@ -21,28 +21,28 @@ public:
 
         s.name = "rrdb.put";
         s.config_section = "task.RPC_RRDB_RRDB_PUT";
-        s.send_one = [this](){this->send_one_put(); };
+        s.send_one = [this](int payload_bytes){this->send_one_put(payload_bytes); };
         s.cases.clear();
         load_suite_config(s);
         suits.push_back(s);
         
         s.name = "rrdb.remove";
         s.config_section = "task.RPC_RRDB_RRDB_REMOVE";
-        s.send_one = [this](){this->send_one_remove(); };
+        s.send_one = [this](int payload_bytes){this->send_one_remove(payload_bytes); };
         s.cases.clear();
         load_suite_config(s);
         suits.push_back(s);
         
         s.name = "rrdb.merge";
         s.config_section = "task.RPC_RRDB_RRDB_MERGE";
-        s.send_one = [this](){this->send_one_merge(); };
+        s.send_one = [this](int payload_bytes){this->send_one_merge(payload_bytes); };
         s.cases.clear();
         load_suite_config(s);
         suits.push_back(s);
         
         s.name = "rrdb.get";
         s.config_section = "task.RPC_RRDB_RRDB_GET";
-        s.send_one = [this](){this->send_one_get(); };
+        s.send_one = [this](int payload_bytes){this->send_one_get(payload_bytes); };
         s.cases.clear();
         load_suite_config(s);
         suits.push_back(s);
@@ -50,19 +50,24 @@ public:
         start(suits);
     }                
 
-    void send_one_put()
+    void send_one_put(int payload_bytes)
     {
         void* ctx = prepare_send_one();
         if (!ctx)
             return;
 
         update_request req;
-        // TODO: randomize the value of req
-        // auto rs = random64(0, 10000000);
-        // std::stringstream ss;
-        // ss << "key." << rs;
-        // req = ss.str();
         
+        auto rs = random64(0, 10000000);
+        binary_writer writer(payload_bytes < 128 ? 128 : payload_bytes);
+        writer.write("key.");
+        writer.write(rs);
+        req.key = writer.get_buffer();
+
+        while (writer.total_size() < payload_bytes)
+            writer.write(req.key);
+        req.value = writer.get_buffer();
+
         begin_put(req, ctx, _timeout_ms);
     }
 
@@ -71,21 +76,22 @@ public:
         const int& resp,
         void* context) override
     {
-        end_send_one(context, err, [this](){ send_one_put();});
+        end_send_one(context, err);
     }
 
-    void send_one_remove()
+    void send_one_remove(int payload_bytes)
     {
         void* ctx = prepare_send_one();
         if (!ctx)
             return;
 
         ::dsn::blob req;
-        // TODO: randomize the value of req
-        // auto rs = random64(0, 10000000);
-        // std::stringstream ss;
-        // ss << "key." << rs;
-        // req = ss.str();
+
+        auto rs = random64(0, 10000000);
+        binary_writer writer;
+        writer.write("key.");
+        writer.write(rs);
+        req = writer.get_buffer();
         
         begin_remove(req, ctx, _timeout_ms);
     }
@@ -95,21 +101,26 @@ public:
         const int& resp,
         void* context) override
     {
-        end_send_one(context, err, [this](){ send_one_remove();});
+        end_send_one(context, err);
     }
 
-    void send_one_merge()
+    void send_one_merge(int payload_bytes)
     {
         void* ctx = prepare_send_one();
         if (!ctx)
             return;
 
         update_request req;
-        // TODO: randomize the value of req
-        // auto rs = random64(0, 10000000);
-        // std::stringstream ss;
-        // ss << "key." << rs;
-        // req = ss.str();
+
+        auto rs = random64(0, 10000000);
+        binary_writer writer(payload_bytes < 128 ? 128 : payload_bytes);
+        writer.write("key.");
+        writer.write(rs);
+        req.key = writer.get_buffer();
+
+        while (writer.total_size() < payload_bytes)
+            writer.write(req.key);
+        req.value = writer.get_buffer();
         
         begin_merge(req, ctx, _timeout_ms);
     }
@@ -119,21 +130,22 @@ public:
         const int& resp,
         void* context) override
     {
-        end_send_one(context, err, [this](){ send_one_merge();});
+        end_send_one(context, err);
     }
 
-    void send_one_get()
+    void send_one_get(int payload_bytes)
     {
         void* ctx = prepare_send_one();
         if (!ctx)
             return;
 
         ::dsn::blob req;
-        // TODO: randomize the value of req
-        // auto rs = random64(0, 10000000);
-        // std::stringstream ss;
-        // ss << "key." << rs;
-        // req = ss.str();
+
+        auto rs = random64(0, 10000000);
+        binary_writer writer;
+        writer.write("key.");
+        writer.write(rs);
+        req = writer.get_buffer();
         
         begin_get(req, ctx, _timeout_ms);
     }
@@ -143,7 +155,7 @@ public:
         const read_response& resp,
         void* context) override
     {
-        end_send_one(context, err, [this](){ send_one_get();});
+        end_send_one(context, err);
     }
 };
 

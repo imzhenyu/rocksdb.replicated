@@ -14,6 +14,18 @@ namespace dsn {
             _wt_opts.disableWAL = true;
         }
 
+        void rrdb_service_impl::on_empty_write()
+        {
+            update_request update;
+            update.key = blob("empty-0xdeadbeef", 0, 16);
+            update.value = blob("empty", 0, 5);
+
+            ::dsn::message_ptr nil = nullptr;
+            ::dsn::service::rpc_replier<int> reply(nil, nil);
+
+            on_put(update, reply);
+        }
+
         void rrdb_service_impl::on_put(const update_request& update, ::dsn::service::rpc_replier<int>& reply)
         {
             dassert(_is_open, "rrdb service %s is not ready", data_dir().c_str());
@@ -92,7 +104,8 @@ namespace dsn {
 
         int  rrdb_service_impl::close(bool clear_state)
         {
-            dassert(_is_open, "rrdb service %s is already closed", data_dir().c_str());
+            if (!_is_open)
+                return 0;
 
             _is_open = false;
             delete _db;
