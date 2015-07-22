@@ -235,6 +235,12 @@ class MemTable {
   // operations on the same MemTable (unless this Memtable is immutable).
   SequenceNumber GetFirstSequenceNumber() { return first_seqno_; }
 
+  // Returns the sequence number of the last element that was inserted
+  // into the memtable.
+  // REQUIRES: external synchronization to prevent simultaneous
+  // operations on the same MemTable (unless this Memtable is immutable).
+  SequenceNumber GetLastSequenceNumber() { return last_seqno_; }
+
   // Returns the sequence number that is guaranteed to be smaller than or equal
   // to the sequence number of any key that could be inserted into this
   // memtable. It can then be assumed that any write with a larger(or equal)
@@ -318,8 +324,11 @@ class MemTable {
   // memtable is flushed to storage.
   VersionEdit edit_;
 
-  // The sequence number of the kv that was inserted first
+  // The sequence number of the kv that was inserted first.
   SequenceNumber first_seqno_;
+
+  // The sequence number of the kv that was inserted last.
+  SequenceNumber last_seqno_;
 
   // The db sequence number at the time of creation or kMaxSequenceNumber
   // if not set.

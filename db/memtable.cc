@@ -71,6 +71,7 @@ MemTable::MemTable(const InternalKeyComparator& cmp,
       flush_completed_(false),
       file_number_(0),
       first_seqno_(0),
+      last_seqno_(0),
       earliest_seqno_(earliest_seq),
       mem_next_logfile_number_(0),
       locks_(moptions_.inplace_update_support
@@ -365,6 +366,10 @@ void MemTable::Add(SequenceNumber s, ValueType type,
     }
     assert(first_seqno_ >= earliest_seqno_);
   }
+
+  // update last_seqno_
+  assert(last_seqno_ == 0 || s >= last_seqno_);
+  last_seqno_ = s;
 
   should_flush_ = ShouldFlushNow();
 }
