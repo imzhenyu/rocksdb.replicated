@@ -158,6 +158,10 @@ class VersionEdit {
     has_last_sequence_ = true;
     last_sequence_ = seq;
   }
+  void SetLastDurableSequence(SequenceNumber seq) {
+    has_last_durable_sequence_ = true;
+    last_durable_sequence_ = seq;
+  }
   void SetMaxColumnFamily(uint32_t max_column_family) {
     has_max_column_family_ = true;
     max_column_family_ = max_column_family;
@@ -248,11 +252,13 @@ class VersionEdit {
   uint64_t next_file_number_;
   uint32_t max_column_family_;
   SequenceNumber last_sequence_;
+  SequenceNumber last_durable_sequence_;
   bool has_comparator_;
   bool has_log_number_;
   bool has_prev_log_number_;
   bool has_next_file_number_;
   bool has_last_sequence_;
+  bool has_last_durable_sequence_;
   bool has_max_column_family_;
 
   DeletedFileSet deleted_files_;

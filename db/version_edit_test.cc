@@ -42,6 +42,7 @@ TEST_F(VersionEditTest, EncodeDecode) {
   edit.SetLogNumber(kBig + 100);
   edit.SetNextFile(kBig + 200);
   edit.SetLastSequence(kBig + 1000);
+  edit.SetLastDurableSequence(kBig + 1000);
   TestEncodeDecode(edit);
 }
 

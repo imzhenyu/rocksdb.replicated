@@ -384,6 +384,7 @@ Status DBImpl::NewDB() {
   new_db.SetLogNumber(0);
   new_db.SetNextFile(2);
   new_db.SetLastSequence(0);
+  new_db.SetLastDurableSequence(0);
 
   Log(InfoLogLevel::INFO_LEVEL,
       db_options_.info_log, "Creating manifest 1 \n");
@@ -2155,9 +2156,8 @@ Status DBImpl::GetLearningMemTableState(
 {
     mutex_.AssertHeld();
 
-    SequenceNumber l0max = versions_->last_durable_sequence_;
+    assert(start > versions_->last_durable_sequence_);
     ColumnFamilyData* cfd = versions_->column_family_set_->GetDefault();
-    assert(start > l0max);
 
     // prepare context from mem
     MemTable *mem = cfd->mem();

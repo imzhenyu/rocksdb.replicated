@@ -1,3 +1,10 @@
+rocksdb.replicated.config
+rocksdb.replicated.creator
+rocksdb.replicated.creator.user
+rocksdb.replicated.files
+rocksdb.replicated.includes
+replication/src/builder
+
 TARGETS
 make_config.mk
 

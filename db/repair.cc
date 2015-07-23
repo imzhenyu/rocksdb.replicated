@@ -395,6 +395,7 @@ class Repairer {
     edit_->SetLogNumber(0);
     edit_->SetNextFile(next_file_number_);
     edit_->SetLastSequence(max_sequence);
+    edit_->SetLastDurableSequence(max_sequence);
 
     for (size_t i = 0; i < tables_.size(); i++) {
       // TODO(opt): separate out into multiple levels

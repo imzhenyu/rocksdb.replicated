@@ -727,8 +727,10 @@ class VersionSet {
   void operator=(const VersionSet&);
 
   void LogAndApplyCFHelper(VersionEdit* edit);
+  // last_durable_seq is both input/output param
   void LogAndApplyHelper(ColumnFamilyData* cfd, VersionBuilder* b, Version* v,
-                         VersionEdit* edit, InstrumentedMutex* mu);
+                         VersionEdit* edit, SequenceNumber* last_durable_seq,
+                         InstrumentedMutex* mu);
 };
 
 }  // namespace rocksdb

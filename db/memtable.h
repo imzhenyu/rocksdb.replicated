@@ -318,7 +318,7 @@ class MemTable {
   // memtable is flushed to storage.
   VersionEdit edit_;
 
-  // The sequence number of the kv that was inserted first
+  // The sequence number of the kv that was inserted first.
   SequenceNumber first_seqno_;
 
   // The db sequence number at the time of creation or kMaxSequenceNumber

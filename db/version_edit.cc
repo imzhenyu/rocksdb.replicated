@@ -35,6 +35,9 @@ enum Tag {
   kColumnFamilyAdd = 201,
   kColumnFamilyDrop = 202,
   kMaxColumnFamily = 203,
+
+  // these are new formats for rDSN replication framework
+  kLastDurableSequence = 300,
 };
 
 uint64_t PackFileNumberAndPathId(uint64_t number, uint64_t path_id) {
@@ -48,6 +51,7 @@ void VersionEdit::Clear() {
   log_number_ = 0;
   prev_log_number_ = 0;
   last_sequence_ = 0;
+  last_durable_sequence_ = 0;
   next_file_number_ = 0;
   max_column_family_ = 0;
   has_comparator_ = false;
@@ -55,6 +59,7 @@ void VersionEdit::Clear() {
   has_prev_log_number_ = false;
   has_next_file_number_ = false;
   has_last_sequence_ = false;
+  has_last_durable_sequence_ = false;
   has_max_column_family_ = false;
   deleted_files_.clear();
   new_files_.clear();
@@ -84,6 +89,10 @@ bool VersionEdit::EncodeTo(std::string* dst) const {
   if (has_last_sequence_) {
     PutVarint32(dst, kLastSequence);
     PutVarint64(dst, last_sequence_);
+  }
+  if (has_last_durable_sequence_) {
+    PutVarint32(dst, kLastDurableSequence);
+    PutVarint64(dst, last_durable_sequence_);
   }
   if (has_max_column_family_) {
     PutVarint32(dst, kMaxColumnFamily);
@@ -212,6 +221,14 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
           has_last_sequence_ = true;
         } else {
           msg = "last sequence number";
+        }
+        break;
+
+      case kLastDurableSequence:
+        if (GetVarint64(&input, &last_durable_sequence_)) {
+          has_last_durable_sequence_ = true;
+        } else {
+          msg = "last durable sequence number";
         }
         break;
 
@@ -365,6 +382,10 @@ std::string VersionEdit::DebugString(bool hex_key) const {
   if (has_last_sequence_) {
     r.append("\n  LastSeq: ");
     AppendNumberTo(&r, last_sequence_);
+  }
+  if (has_last_durable_sequence_) {
+    r.append("\n  LastDurableSeq: ");
+    AppendNumberTo(&r, last_durable_sequence_);
   }
   for (DeletedFileSet::const_iterator iter = deleted_files_.begin();
        iter != deleted_files_.end();

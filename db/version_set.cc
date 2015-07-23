@@ -1878,6 +1878,7 @@ Status VersionSet::LogAndApply(ColumnFamilyData* column_family_data,
 
   // process all requests in the queue
   ManifestWriter* last_writer = &w;
+  SequenceNumber last_durable_seq = last_durable_sequence_;
   assert(!manifest_writers_.empty());
   assert(manifest_writers_.front() == &w);
   if (edit->IsColumnFamilyManipulation()) {
@@ -1896,7 +1897,8 @@ Status VersionSet::LogAndApply(ColumnFamilyData* column_family_data,
         break;
       }
       last_writer = writer;
-      LogAndApplyHelper(column_family_data, builder, v, last_writer->edit, mu);
+      LogAndApplyHelper(column_family_data, builder, v,
+          last_writer->edit, &last_durable_seq, mu);
       batch_edits.push_back(last_writer->edit);
     }
     builder->SaveTo(v->storage_info());
@@ -2061,8 +2063,7 @@ Status VersionSet::LogAndApply(ColumnFamilyData* column_family_data,
     manifest_file_number_ = pending_manifest_file_number_;
     manifest_file_size_ = new_manifest_file_size;
     prev_log_number_ = edit->prev_log_number_;
-    last_sequence_ = edit->last_sequence_;
-    last_durable_sequence_ = edit->last_sequence_;
+    last_durable_sequence_ = last_durable_seq;
   } else {
     Log(InfoLogLevel::ERROR_LEVEL, db_options_->info_log,
         "Error in committing version %lu to [%s]",
@@ -2102,6 +2103,7 @@ void VersionSet::LogAndApplyCFHelper(VersionEdit* edit) {
   assert(edit->IsColumnFamilyManipulation());
   edit->SetNextFile(next_file_number_.load());
   edit->SetLastSequence(last_sequence_);
+  edit->SetLastDurableSequence(last_durable_sequence_);
   if (edit->is_column_family_drop_) {
     // if we drop column family, we have to make sure to save max column family,
     // so that we don't reuse existing ID
@@ -2111,7 +2113,9 @@ void VersionSet::LogAndApplyCFHelper(VersionEdit* edit) {
 
 void VersionSet::LogAndApplyHelper(ColumnFamilyData* cfd,
                                    VersionBuilder* builder, Version* v,
-                                   VersionEdit* edit, InstrumentedMutex* mu) {
+                                   VersionEdit* edit,
+                                   SequenceNumber* last_durable_seq,
+                                   InstrumentedMutex* mu) {
   mu->AssertHeld();
   assert(!edit->IsColumnFamilyManipulation());
 
@@ -2128,6 +2132,12 @@ void VersionSet::LogAndApplyHelper(ColumnFamilyData* cfd,
   if (!edit->has_last_sequence_) {
     edit->SetLastSequence(last_sequence_);
   }
+
+  for (size_t i = 0; i < edit->new_files_.size(); i++) {
+      const FileMetaData& f = edit->new_files_[i].second;
+      *last_durable_seq = std::max(f.largest_seqno, *last_durable_seq);
+  }
+  edit->SetLastDurableSequence(*last_durable_seq);
   
   builder->Apply(edit);
 }
@@ -2186,8 +2196,10 @@ Status VersionSet::Recover(
   bool have_prev_log_number = false;
   bool have_next_file = false;
   bool have_last_sequence = false;
+  bool have_last_durable_seq = false;
   uint64_t next_file = 0;
   uint64_t last_sequence = 0;
+  uint64_t last_durable_seq = 0;
   uint64_t log_number = 0;
   uint64_t previous_log_number = 0;
   uint32_t max_column_family = 0;
@@ -2335,6 +2347,11 @@ Status VersionSet::Recover(
         last_sequence = edit.last_sequence_;
         have_last_sequence = true;
       }
+
+      if (edit.has_last_durable_sequence_) {
+        last_durable_seq = edit.last_durable_sequence_;
+        have_last_durable_seq = true;
+      }
     }
   }
 
@@ -2345,6 +2362,8 @@ Status VersionSet::Recover(
       s = Status::Corruption("no meta-lognumber entry in descriptor");
     } else if (!have_last_sequence) {
       s = Status::Corruption("no last-sequence-number entry in descriptor");
+    } else if (!have_last_durable_seq) {
+      s = Status::Corruption("no last-durable-sequence-number entry in descriptor");
     }
 
     if (!have_prev_log_number) {
@@ -2396,17 +2415,18 @@ Status VersionSet::Recover(
     manifest_file_size_ = current_manifest_file_size;
     next_file_number_.store(next_file + 1);
     last_sequence_ = last_sequence;
-    last_durable_sequence_ = last_sequence;
+    last_durable_sequence_ = last_durable_seq;
     prev_log_number_ = previous_log_number;
 
     Log(InfoLogLevel::INFO_LEVEL, db_options_->info_log,
-        "Recovered from manifest file:%s succeeded,"
+        "Recovered from manifest file:%s succeeded, "
         "manifest_file_number is %lu, next_file_number is %lu, "
-        "last_sequence is %lu, log_number is %lu,"
-        "prev_log_number is %lu,"
+        "last_sequence is %lu, last_durable_sequence is %lu, "
+        "log_number is %lu, prev_log_number is %lu, "
         "max_column_family is %u\n",
         manifest_filename.c_str(), (unsigned long)manifest_file_number_,
-        (unsigned long)next_file_number_.load(), (unsigned long)last_sequence_,
+        (unsigned long)next_file_number_.load(),
+        (unsigned long)last_sequence_, (unsigned long)last_durable_sequence_,
         (unsigned long)log_number, (unsigned long)prev_log_number_,
         column_family_set_->GetMaxColumnFamily());
 
@@ -2590,8 +2610,10 @@ Status VersionSet::DumpManifest(Options& options, std::string& dscname,
   bool have_prev_log_number = false;
   bool have_next_file = false;
   bool have_last_sequence = false;
+  bool have_last_durable_seq = false;
   uint64_t next_file = 0;
   uint64_t last_sequence = 0;
+  uint64_t last_durable_seq = 0;
   uint64_t previous_log_number = 0;
   int count = 0;
   std::unordered_map<uint32_t, std::string> comparators;
@@ -2697,6 +2719,11 @@ Status VersionSet::DumpManifest(Options& options, std::string& dscname,
         have_last_sequence = true;
       }
 
+      if (edit.has_last_durable_sequence_) {
+        last_durable_seq = edit.last_durable_sequence_;
+        have_last_durable_seq = true;
+      }
+
       if (edit.has_max_column_family_) {
         column_family_set_->UpdateMaxColumnFamily(edit.max_column_family_);
       }
@@ -2711,6 +2738,8 @@ Status VersionSet::DumpManifest(Options& options, std::string& dscname,
     } else if (!have_last_sequence) {
       printf("no last-sequence-number entry in descriptor");
       s = Status::Corruption("no last-sequence-number entry in descriptor");
+    } else if (!have_last_durable_seq) {
+      s = Status::Corruption("no last-durable-sequence-number entry in descriptor");
     }
 
     if (!have_prev_log_number) {
@@ -2751,14 +2780,14 @@ Status VersionSet::DumpManifest(Options& options, std::string& dscname,
 
     next_file_number_.store(next_file + 1);
     last_sequence_ = last_sequence;
-    last_durable_sequence_ = last_sequence;
+    last_durable_sequence_ = last_durable_seq;
     prev_log_number_ = previous_log_number;
 
     printf(
-        "next_file_number %lu last_sequence "
-        "%lu  prev_log_number %lu max_column_family %u\n",
+        "next_file_number %lu last_sequence %lu last_durable_sequence %lu "
+        "prev_log_number %lu max_column_family %u\n",
         (unsigned long)next_file_number_.load(), (unsigned long)last_sequence,
-        (unsigned long)previous_log_number,
+        (unsigned long)last_durable_seq, (unsigned long)previous_log_number,
         column_family_set_->GetMaxColumnFamily());
   }
 
