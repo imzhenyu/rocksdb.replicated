@@ -24,6 +24,7 @@ your make commands, like this: `PORTABLE=1 make static_lib`
 * You can link RocksDB with following compression libraries:
   - [zlib](http://www.zlib.net/) - a library for data compression.
   - [bzip2](http://www.bzip.org/) - a library for data compression.
+  - [lz4](http://www.lz4.org/) - a library for data compression.
   - [snappy](https://code.google.com/p/snappy/) - a library for fast
       data compression.
 
@@ -43,6 +44,7 @@ your make commands, like this: `PORTABLE=1 make static_lib`
       `sudo apt-get install libsnappy-dev`.
     * Install zlib. Try: `sudo apt-get install zlib1g-dev`.
     * Install bzip2: `sudo apt-get install libbz2-dev`.
+    * Install lz4: `sudo apt-get install liblz4-dev`.
 * **Linux - CentOS**
     * Upgrade your gcc to version at least 4.7 to get C++11 support:
       `yum install gcc47-c++`
@@ -69,6 +71,11 @@ your make commands, like this: `PORTABLE=1 make static_lib`
 
               sudo yum install bzip2
               sudo yum install bzip2-devel
+
+    * Install lz4:
+
+              sudo yum install lz4
+              sudo yum install lz4-devel
 
 * **OS X**:
     * Install latest C++ compiler that supports C++ 11:
