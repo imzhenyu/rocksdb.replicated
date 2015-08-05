@@ -2234,7 +2234,7 @@ Status DBImpl::GetLearningMemTableState(
 
     for (auto it : its)
     {
-        delete it;
+        it->~Iterator();
     }
 
     return s;
