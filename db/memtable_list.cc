@@ -177,6 +177,14 @@ SequenceNumber MemTableListVersion::GetEarliestSequenceNumber(
   }
 }
 
+void MemTableListVersion::GetMemtableList(std::vector<MemTable*>* list,
+    bool include_history) const {
+    list->insert(list->end(), memlist_.begin(), memlist_.end());
+    if (include_history && !memlist_history_.empty()) {
+        list->insert(list->end(), memlist_history_.begin(), memlist_history_.end());
+    }
+}
+
 // caller is responsible for referencing m
 void MemTableListVersion::Add(MemTable* m, autovector<MemTable*>* to_delete) {
   assert(refs_ == 1);  // only when refs_ == 1 is MemTableListVersion mutable

@@ -2176,63 +2176,81 @@ Status DBImpl::GetLearningMemTableState(
     Status s;
     ReadOptions opts;
     Arena arena;
+    std::vector<MemTable*> memtables;
     std::vector<Iterator*> its;
+    std::vector<bool> do_filter;
     size_t reserve_size = 0;
-
-    // add mem iterator
-    its.push_back(cfd->mem()->NewIterator(opts, &arena));
-    reserve_size += cfd->mem()->ApproximateMemoryUsage();
-
-    // add imm iterators
-    cfd->imm()->current()->AddIterators(opts, &its, &arena);
-    reserve_size += cfd->imm()->ApproximateMemoryUsage();
+    memtables.push_back(cfd->mem()); // add current live memtable
+    cfd->imm()->GetMemtableList(&memtables); // add immutable memtables
+    for (auto m : memtables)
+    {
+        if (m->IsEmpty() || start > m->GetLastSequenceNumber())
+        {
+            // means this memtable doesn't contains any wanted data
+            continue;
+        }
+        its.push_back(m->NewIterator(opts, &arena));
+        // if first < start <= last, means need do filter
+        do_filter.push_back(start > m->GetFirstSequenceNumber() ? true : false);
+        reserve_size += m->ApproximateMemoryUsage();
+    }
+    assert(its.size() == do_filter.size());
 
     WriteBatch batch; // use the same batch to share string buffer
     mem_state.reserve(reserve_size);
 
-    for (auto it : its)
+    for (size_t i = 0; i < its.size(); ++i)
     {
+        Iterator* it = its[i];
+        bool filter = do_filter[i];
+
         for (it->SeekToFirst(); it->Valid(); it->Next())
         {
             // iterator order: <user-key, seq-no(desending), type>
             // each key() is an AppendInternalKey
 
-            // find those bigger updates with seqno > start
-            ParsedInternalKey pkey;
-            if (!ParseInternalKey(it->key(), &pkey))
+            if (filter)
             {
-                // bad data
-                s = Status::Corruption("PerseInternalKey fail when learning memtables");
-                break;
-            }
+                // find those bigger updates with seqno > start
+                ParsedInternalKey pkey;
+                if (!ParseInternalKey(it->key(), &pkey))
+                {
+                    // bad data
+                    s = Status::Corruption("PerseInternalKey fail when learning memtables");
+                    break;
+                }
 
-            if (pkey.sequence < start)
+                if (pkey.sequence < start)
+                {
+                    // ignore obsolate data
+                    continue;
+                }
+
+                batch.Clear();
+
+                switch (pkey.type)
+                {
+                    case kTypeDeletion:
+                        batch.Delete(pkey.user_key);
+                        break;
+                    case kTypeValue:
+                        batch.Put(pkey.user_key, it->value());
+                        break;
+                    case kTypeMerge:
+                        batch.Merge(pkey.user_key, it->value());
+                        break;
+                    default:
+                        assert(false);
+                }
+
+                WriteBatchInternal::SetSequence(&batch, pkey.sequence, true);
+
+                Slice content = WriteBatchInternal::Contents(&batch);
+                PutLengthPrefixedSlice(&mem_state, content);
+            }
+            else
             {
-                // ignore obsolate data
-                continue;
             }
-
-            batch.Clear();
-
-            switch (pkey.type)
-            {
-                case kTypeDeletion:
-                    batch.Delete(pkey.user_key);
-                    break;
-                case kTypeValue:
-                    batch.Put(pkey.user_key, it->value());
-                    break;
-                case kTypeMerge:
-                    batch.Merge(pkey.user_key, it->value());
-                    break;
-                default:
-                    assert(false);
-            }
-
-            WriteBatchInternal::SetSequence(&batch, pkey.sequence, true);
-
-            Slice content = WriteBatchInternal::Contents(&batch);
-            PutLengthPrefixedSlice(&mem_state, content);
         }
 
         if (!s.ok())

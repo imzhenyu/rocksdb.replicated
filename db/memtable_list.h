@@ -92,6 +92,9 @@ class MemTableListVersion {
   // History.
   SequenceNumber GetEarliestSequenceNumber(bool include_history = false) const;
 
+  // Put memtables into the back of list. The headmost one is the latest.
+  void GetMemtableList(std::vector<MemTable*>* list, bool include_history = false) const;
+
  private:
   // REQUIRE: m is an immutable memtable
   void Add(MemTable* m, autovector<MemTable*>* to_delete);
