@@ -2092,9 +2092,19 @@ Status DBImpl::ApplyLearningState(
         // apply edit first
         if (edit.NumEntries() > 0)
         {
+            Status status = Status::OK();
+
+            // flush memtables firstly and wait done
+            FlushOptions flush_options;
+            flush_options.wait = true;
+            status = FlushMemTable(cfd, flush_options);
+            if (!status.ok())
+            {
+                return status;
+            }
+
             mutex_.Lock();
 
-            Status status = Status::OK();
             const MutableCFOptions mutable_cf_options =
                 *cfd->GetLatestMutableCFOptions();
             
@@ -3912,6 +3922,13 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
         }
       }
 
+      // TODO(qinzuoyan) fix the following problem:
+      // Under concurrent env, maybe write_batch_group.size() > 1, then
+      // all the writes always use the first write's sequence_number.
+      // That means, the non-first writes's given_sequence_number are discarded.
+      // Here doesn't cause any problem, because replication framework always
+      // calls this method serially (in a single thread), so the batch count
+      // is always 1.
       const SequenceNumber current_sequence = write_options.given_sequence_number == 0 ?
           (last_sequence + 1) : write_options.given_sequence_number;
       assert(current_sequence > last_sequence);
