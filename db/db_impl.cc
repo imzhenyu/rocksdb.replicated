@@ -2181,16 +2181,16 @@ Status DBImpl::GetLearningMemTableState(
     std::vector<bool> do_filter;
     size_t reserve_size = 0;
     memtables.push_back(cfd->mem()); // add current live memtable
-    cfd->imm()->GetMemtableList(&memtables); // add immutable memtables
+    cfd->imm()->current()->GetMemtableList(&memtables); // add immutable memtables
     for (auto m : memtables)
     {
         if (m->IsEmpty() || start > m->GetLastSequenceNumber())
         {
-            // means this memtable doesn't contains any wanted data
+            // this memtable doesn't contains any wanted data, ignore it
             continue;
         }
         its.push_back(m->NewIterator(opts, &arena));
-        // if first < start <= last, means need do filter
+        // if memtable.first < start <= memtable.last, means need do filter
         do_filter.push_back(start > m->GetFirstSequenceNumber() ? true : false);
         reserve_size += m->ApproximateMemoryUsage();
     }
@@ -2206,12 +2206,13 @@ Status DBImpl::GetLearningMemTableState(
 
         for (it->SeekToFirst(); it->Valid(); it->Next())
         {
-            // iterator order: <user-key, seq-no(desending), type>
-            // each key() is an AppendInternalKey
+            // iterator order: <user-key(ascending), seq-no(desending), type(desending)>
+            // each key() is an internal_key
+            // each entry() is: varint(key-len) | internal_key | varint(value-len) | value
 
             if (filter)
             {
-                // find those bigger updates with seqno > start
+                // find those updates with seqno >= start
                 ParsedInternalKey pkey;
                 if (!ParseInternalKey(it->key(), &pkey))
                 {
@@ -2225,32 +2226,11 @@ Status DBImpl::GetLearningMemTableState(
                     // ignore obsolate data
                     continue;
                 }
-
-                batch.Clear();
-
-                switch (pkey.type)
-                {
-                    case kTypeDeletion:
-                        batch.Delete(pkey.user_key);
-                        break;
-                    case kTypeValue:
-                        batch.Put(pkey.user_key, it->value());
-                        break;
-                    case kTypeMerge:
-                        batch.Merge(pkey.user_key, it->value());
-                        break;
-                    default:
-                        assert(false);
-                }
-
-                WriteBatchInternal::SetSequence(&batch, pkey.sequence, true);
-
-                Slice content = WriteBatchInternal::Contents(&batch);
-                PutLengthPrefixedSlice(&mem_state, content);
             }
-            else
-            {
-            }
+
+            // put entry into mem_state
+            Slice entry = it->Entry();
+            mem_state.append(entry.data(), entry.size());
         }
 
         if (!s.ok())
@@ -2268,6 +2248,23 @@ Status DBImpl::GetLearningMemTableState(
     return s;
 }
 
+struct MemtableEntry
+{
+    ParsedInternalKey key;
+    Slice value;
+
+    bool Parse(Slice* input) {
+        Slice key_slice;
+        if (!GetLengthPrefixedSlice(input, &key_slice))
+            return false;
+        if (!ParseInternalKey(key_slice, &key))
+            return false;
+        if (!GetLengthPrefixedSlice(input, &value))
+            return false;
+        return true;
+    }
+};
+
 Status DBImpl::ApplyLearningMemTableState(
     SequenceNumber start,
     std::string& mem_state
@@ -2277,47 +2274,53 @@ Status DBImpl::ApplyLearningMemTableState(
     WriteOptions opts;
     opts.disableWAL = true;
 
-    std::multimap<SequenceNumber, Slice> batches;
-
+    std::multimap<SequenceNumber, MemtableEntry> batches;
     while (!contents.empty())
     {
-        Slice content;
-        if (!GetLengthPrefixedSlice(&contents, &content))
+        MemtableEntry entry;
+        if (!entry.Parse(&contents))
             return Status::Corruption("parse data fail when apply learning memtables");
-
-        SequenceNumber seq = DecodeFixed64(content.data());
-        batches.insert(std::multimap<SequenceNumber, Slice>::value_type(seq, content));
+        assert(entry.key.sequence >= start);
+        batches.insert(std::multimap<SequenceNumber, MemtableEntry>::value_type(entry.key.sequence, entry));
     }
 
-    WriteBatch batch;
-    WriteBatch batch_tmp;
-    SequenceNumber lastSeq = 0;
+    WriteBatch batch; // reuse batch to share string buffer
+    SequenceNumber lastSeq = kMaxSequenceNumber;
     for (auto& kv : batches)
     {
-        if (kv.first == lastSeq)
+        if (kv.first != lastSeq)
         {
-            batch_tmp.Clear();
-            WriteBatchInternal::SetContents(&batch_tmp, kv.second);
-            WriteBatchInternal::Append(&batch, &batch_tmp);
-            continue;
+            // new batch, write the old batch firstly
+            if (batch.Count() > 0) {
+                WriteBatchInternal::SetSequence(&batch, lastSeq, true);
+                opts.given_sequence_number = lastSeq;
+                assert(opts.given_sequence_number > versions_->LastSequence());
+                auto status = Write(opts, &batch);
+                if (!status.ok())
+                    return status;
+            }
+            lastSeq = kv.first;
+            batch.Clear();
         }
 
-        if (batch.Count() > 0)
+        const MemtableEntry& entry = kv.second;
+        switch (entry.key.type)
         {
-            WriteBatchInternal::SetSequence(&batch, lastSeq, true);
-            opts.given_sequence_number = lastSeq;
-            assert(opts.given_sequence_number > versions_->LastSequence());
-            auto status = Write(opts, &batch);
-            if (!status.ok())
-                return status;
+        case kTypeDeletion:
+            batch.Delete(entry.key.user_key);
+            break;
+        case kTypeValue:
+            batch.Put(entry.key.user_key, entry.value);
+            break;
+        case kTypeMerge:
+            batch.Merge(entry.key.user_key, entry.value);
+            break;
+        default:
+            return Status::Corruption("invalid type when apply learning memtables");
         }
-
-        lastSeq = kv.first;
-        batch.Clear();
-        WriteBatchInternal::SetContents(&batch, kv.second);
     }
 
-    // the last batch
+    // write the last batch
     if (batch.Count() > 0)
     {
         WriteBatchInternal::SetSequence(&batch, lastSeq, true);
