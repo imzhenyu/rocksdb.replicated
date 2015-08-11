@@ -41,6 +41,8 @@ namespace dsn {
             rocksdb::Slice skey(update.key.data(), update.key.length());
             rocksdb::Slice svalue(update.value.data(), update.value.length());
             rocksdb::Status status = _db->Put(opts, skey, svalue);
+            dassert(status.ok(), status.ToString().c_str());
+            dassert(_db->GetLatestSequenceNumber() == _last_committed_decree + 1, "");
             reply(status.code());
 
             ++_last_committed_decree;
@@ -55,6 +57,8 @@ namespace dsn {
 
             rocksdb::Slice skey(key.data(), key.length());
             rocksdb::Status status = _db->Delete(opts, skey);
+            dassert(status.ok(), status.ToString().c_str());
+            dassert(_db->GetLatestSequenceNumber() == _last_committed_decree + 1, "");
             reply(status.code());
 
             ++_last_committed_decree;
@@ -69,7 +73,13 @@ namespace dsn {
 
             rocksdb::Slice skey(update.key.data(), update.key.length());
             rocksdb::Slice svalue(update.value.data(), update.value.length());
+            // TODO(qinzuoyan) To support merging, we need provide a merge operator when opening DB, or it will
+            // fail when call Merge().
             rocksdb::Status status = _db->Merge(opts, skey, svalue);
+            // Here we should make sure that the Put/Remove/Merge operator is called successfully, so that the
+            // last_committed_decree is consistent inside and outside the db.
+            dassert(status.ok(), status.ToString().c_str());
+            dassert(_db->GetLatestSequenceNumber() == _last_committed_decree + 1, "");
             reply(status.code());
 
             ++_last_committed_decree;
@@ -104,6 +114,8 @@ namespace dsn {
                 dassert(_db->GetLatestSequenceNumber() == _db->GetLatestDurableSequenceNumber(), "");
                 _is_open = true;
                 _last_committed_decree = _db->GetLatestSequenceNumber();
+
+                ddebug("open app: lastC/DDecree = <%llu, %llu>", last_committed_decree(), last_durable_decree());
             }
 
             return status.code();
@@ -124,7 +136,6 @@ namespace dsn {
 
             if (clear_state)
             {
-                // TODO(qinzuoyan) handle failures
                 boost::filesystem::path lp = data_dir();
                 ::boost::filesystem::remove_all(lp);
                 ::boost::filesystem::create_directory(lp);
@@ -170,7 +181,11 @@ namespace dsn {
                 writer.write(edit);
                 writer.write(mem_state);
 
-                ddebug("learning state meta size = %d", writer.total_size());
+                ddebug("lastC/DDecree=<%llu,%llu>, meta_size=%d, "
+                       "start=%lld, end=%lld, file_count=%d, mem_state_size=%d",
+                       last_committed_decree(), last_durable_decree(), writer.total_size(),
+                       static_cast<long long int>(start), static_cast<long long int>(end),
+                       state.files.size(), mem_state.size());
 
                 state.meta.push_back(writer.get_buffer());
             }
@@ -184,7 +199,6 @@ namespace dsn {
 
             int err = 0;
             binary_reader reader(state.meta[0]);
-            ddebug("learning state meta size = %d", reader.total_size());
 
             rocksdb::SequenceNumber start;
             rocksdb::SequenceNumber end;
@@ -196,10 +210,17 @@ namespace dsn {
             reader.read(edit);
             reader.read(mem_state);
 
+            ddebug("lastC/DDecree=<%llu,%llu>, meta_size=%d, "
+                   "start=%lld, end=%lld, file_count=%d, mem_state_size=%d",
+                   last_committed_decree(), last_durable_decree(), reader.total_size(),
+                   static_cast<long long int>(start), static_cast<long long int>(end),
+                   state.files.size(), mem_state.size());
+
             if (mem_state.size() == 0 && state.files.size() == 0)
             {
                 // nothing to learn
-                // TODO(qinzuoyan) do some sanity check
+                dassert(end == start - 1, "");
+                dassert(end == last_committed_decree(), "");
                 return 0;
             }
 
@@ -242,10 +263,8 @@ namespace dsn {
             auto status = _db->ApplyLearningState(start, mem_state, edit);
             if (status.ok())
             {
-                dassert(_db->GetLatestSequenceNumber() >= _db->GetLatestDurableSequenceNumber(), "");
-                dassert(end == _db->GetLatestSequenceNumber(), "");
                 _last_committed_decree = end;
-                ddebug("lastcommitted in DB %s, <C,D> to <%lld, %lld> with <start,end> as <%lld, %lld>\n",
+                ddebug("lastcommitted in DB %s, <C,D> to <%lld, %lld> with <start,end> as <%lld, %lld>",
                         data_dir().c_str(),
                         static_cast<long long int>(last_committed_decree()),
                         static_cast<long long int>(last_durable_decree()),

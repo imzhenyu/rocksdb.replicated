@@ -67,6 +67,8 @@ public:
             //_rrdb_client->begin_remove(req);
            
         }
+        /*
+        // Merge is valid only when merge operator is provided when open the db.
         {
             update_request req;
             //sync:
@@ -77,6 +79,7 @@ public:
             //_rrdb_client->begin_merge(req);
            
         }
+        */
         {
             ::dsn::blob req;
             //sync:
@@ -137,4 +140,4 @@ private:
     rrdb_perf_test_client *_rrdb_client;
 };
 
-} } 
+} }

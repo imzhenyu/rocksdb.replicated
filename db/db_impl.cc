@@ -1927,7 +1927,7 @@ SequenceNumber DBImpl::GetLatestDurableSequenceNumber() const {
 }
 
 // get delta state for learner [start, infinite)
-Status DBImpl::GetLearningState(/*out*/ SequenceNumber& start,
+Status DBImpl::GetLearningState(/*in&out*/ SequenceNumber& start,
     /*out*/ SequenceNumber& end,
     /*out*/ std::string& mem_state,
     /*out*/ std::string& edit_encoded,
@@ -1937,14 +1937,13 @@ Status DBImpl::GetLearningState(/*out*/ SequenceNumber& start,
     mutex_.Lock();
 
     // all state := mem_table +(l0max) level 0 + (l0min) (level 1+)+
-    SequenceNumber last_seq = versions_->last_sequence_;
-    SequenceNumber last_durable_seq = versions_->last_durable_sequence_;
+    SequenceNumber last_seq = versions_->LastSequence();
+    SequenceNumber last_durable_seq = versions_->LastDurableSequence();
     ColumnFamilyData* cfd = versions_->column_family_set_->GetDefault();
 
-    //printf ("GetLearningState start vs last_seq vs durable: %lu vs %lu vs %lu\n", start, 
-    //        versions_->last_sequence_.load(),
-    //        versions_->last_durable_sequence_.load()
-    //        );
+    Log(InfoLogLevel::INFO_LEVEL, db_options_.info_log,
+        "GetLearningState start=%llu, last_seq=%llu, last_durable_seq=%llu",
+        start, last_seq, last_durable_seq);
 
     // invalid 
     // { start > LastSequence + 1 }
@@ -1976,7 +1975,6 @@ Status DBImpl::GetLearningState(/*out*/ SequenceNumber& start,
         if (cfd->imm()->NumNotFlushed() > 0)
         {
             mutex_.Unlock();
-
             // wait for next round learning
             return Status::Busy("flush sstables in progress");
         }
@@ -2025,10 +2023,9 @@ Status DBImpl::GetLearningState(/*out*/ SequenceNumber& start,
                 // { FileSmallestSequenceNumber < start <= FileLargestSequenceNumber }
                 else if (start <= v->largest_seqno)
                 {
-                    // TODO: handle this case
-                    printf("we assume this is impossbile for now as we assume the flush point for level 0 is deterministic"
-                        " as long as the configuration is the same across the replicas.");
-                    return Status::Aborted();
+                    // TODO(qinzuoyan): Currently it is allowed to have duplicated data in
+                    // the sstable when Merge() is not used.
+                    edit.AddFile(0, v);
                 }
 
                 // file sequence range is not covered by [start, infinite)
@@ -2044,6 +2041,10 @@ Status DBImpl::GetLearningState(/*out*/ SequenceNumber& start,
         // { NumLevel0Files == 0 || start < Level0Min }
         else
         {
+            Log(InfoLogLevel::INFO_LEVEL, db_options_.info_log,
+                "GetLearningState start=%llu, NumLevel0Files=%llu, Level0Min=%llu, set start to 0",
+                start, vsi->NumLevelFiles(0),
+                vsi->NumLevelFiles(0) > 0 ? vsi->LevelFiles(0).front()->smallest_seqnolast_durable_seq : 0);
             start = 0;
             for (int i = vsi->base_level(); i >= 0; i--)
             {
@@ -2298,6 +2299,8 @@ Status DBImpl::ApplyLearningMemTableState(
                 auto status = Write(opts, &batch);
                 if (!status.ok())
                     return status;
+                Log(InfoLogLevel::DEBUG_LEVEL, db_options_.info_log,
+                        "apply memtable seq_no=%lld", lastSeq);
             }
             lastSeq = kv.first;
             batch.Clear();
@@ -2329,6 +2332,8 @@ Status DBImpl::ApplyLearningMemTableState(
         auto status = Write(opts, &batch);
         if (!status.ok())
             return status;
+        Log(InfoLogLevel::DEBUG_LEVEL, db_options_.info_log,
+                "apply memtable seq_no=%lld", lastSeq);
     }
 
     return Status::OK();
