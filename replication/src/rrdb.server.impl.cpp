@@ -1,6 +1,11 @@
 # include "rrdb.server.impl.h"
 # include <boost/filesystem.hpp>
 
+# ifdef __TITLE__
+# undef __TITLE__
+# endif
+#define __TITLE__ "rrdb.server.impl"
+
 namespace dsn {
     namespace apps {
         rrdb_service_impl::rrdb_service_impl(::dsn::replication::replica* replica, ::dsn::configuration_ptr& config)
@@ -8,14 +13,14 @@ namespace dsn {
         {
             _is_open = false;
 
-            //
             // disable write ahead logging as replication handles logging instead now
-            //
             _wt_opts.disableWAL = true;
         }
 
         void rrdb_service_impl::on_empty_write()
         {
+            dassert(_is_open, "rrdb service %s is not ready", data_dir().c_str());
+            
             update_request update;
             update.key = blob("empty-0xdeadbeef", 0, 16);
             update.value = blob("empty", 0, 5);
@@ -36,6 +41,8 @@ namespace dsn {
             rocksdb::Slice skey(update.key.data(), update.key.length());
             rocksdb::Slice svalue(update.value.data(), update.value.length());
             rocksdb::Status status = _db->Put(opts, skey, svalue);
+            dassert(status.ok(), status.ToString().c_str());
+            dassert(_db->GetLatestSequenceNumber() == _last_committed_decree + 1, "");
             reply(status.code());
 
             ++_last_committed_decree;
@@ -50,6 +57,8 @@ namespace dsn {
 
             rocksdb::Slice skey(key.data(), key.length());
             rocksdb::Status status = _db->Delete(opts, skey);
+            dassert(status.ok(), status.ToString().c_str());
+            dassert(_db->GetLatestSequenceNumber() == _last_committed_decree + 1, "");
             reply(status.code());
 
             ++_last_committed_decree;
@@ -64,7 +73,13 @@ namespace dsn {
 
             rocksdb::Slice skey(update.key.data(), update.key.length());
             rocksdb::Slice svalue(update.value.data(), update.value.length());
+            // TODO(qinzuoyan) To support merging, we need provide a merge operator when opening DB, or it will
+            // fail when call Merge().
             rocksdb::Status status = _db->Merge(opts, skey, svalue);
+            // Here we should make sure that the Put/Remove/Merge operator is called successfully, so that the
+            // last_committed_decree is consistent inside and outside the db.
+            dassert(status.ok(), status.ToString().c_str());
+            dassert(_db->GetLatestSequenceNumber() == _last_committed_decree + 1, "");
             reply(status.code());
 
             ++_last_committed_decree;
@@ -72,10 +87,9 @@ namespace dsn {
 
         void rrdb_service_impl::on_get(const ::dsn::blob& key, ::dsn::service::rpc_replier<read_response>& reply)
         {
-            read_response resp;
-
             dassert(_is_open, "rrdb service %s is not ready", data_dir().c_str());
 
+            read_response resp;
             rocksdb::Slice skey(key.data(), key.length());
             rocksdb::Status status = _db->Get(_rd_opts, skey, &resp.value);
             resp.error = status.code();
@@ -95,8 +109,13 @@ namespace dsn {
             auto status = rocksdb::DB::Open(opts, data_dir() + "/rdb", &_db);
             if (status.ok())
             {
+                // because disableWAL is set true when do writes, so after open db,
+                // it should satisfy that LatestSequenceNumber == LatestDurableSequenceNumber.
+                dassert(_db->GetLatestSequenceNumber() == _db->GetLatestDurableSequenceNumber(), "");
                 _is_open = true;
-                _last_committed_decree = last_durable_decree();
+                _last_committed_decree = _db->GetLatestSequenceNumber();
+
+                ddebug("open app: lastC/DDecree = <%llu, %llu>", last_committed_decree(), last_durable_decree());
             }
 
             return status.code();
@@ -105,7 +124,11 @@ namespace dsn {
         int  rrdb_service_impl::close(bool clear_state)
         {
             if (!_is_open)
+            {
+                dassert(_db == nullptr, "");
+                dassert(!clear_state, ""); // should not be here if do clear
                 return 0;
+            }
 
             _is_open = false;
             delete _db;
@@ -117,15 +140,16 @@ namespace dsn {
                 ::boost::filesystem::remove_all(lp);
                 ::boost::filesystem::create_directory(lp);
             }
+
             return 0;
         }
 
-        int  rrdb_service_impl::flush(bool force)
+        int  rrdb_service_impl::flush(bool wait)
         {
             dassert(_is_open, "rrdb service %s is not ready", data_dir().c_str());
 
             rocksdb::FlushOptions opts;
-            opts.wait = force;
+            opts.wait = wait;
 
             auto status = _db->Flush(opts);
             return status.code();
@@ -139,7 +163,7 @@ namespace dsn {
         int  rrdb_service_impl::get_learn_state(
             ::dsn::replication::decree start, 
             const blob& learn_req, 
-            __out_param::dsn::replication::learn_state& state)
+            __out_param ::dsn::replication::learn_state& state)
         {
             dassert(_is_open, "rrdb service %s is not ready", data_dir().c_str());
 
@@ -157,7 +181,11 @@ namespace dsn {
                 writer.write(edit);
                 writer.write(mem_state);
 
-                printf("GetLearningState result size = %d\n", writer.total_size());
+                ddebug("lastC/DDecree=<%llu,%llu>, meta_size=%d, "
+                       "start=%lld, end=%lld, file_count=%d, mem_state_size=%d",
+                       last_committed_decree(), last_durable_decree(), writer.total_size(),
+                       static_cast<long long int>(start), static_cast<long long int>(end),
+                       state.files.size(), mem_state.size());
 
                 state.meta.push_back(writer.get_buffer());
             }
@@ -169,9 +197,8 @@ namespace dsn {
         {
             dassert(_is_open, "rrdb service %s is not ready", data_dir().c_str());
 
+            int err = 0;
             binary_reader reader(state.meta[0]);
-
-            printf("ApplyLearningState result size = %d\n", reader.total_size());
 
             rocksdb::SequenceNumber start;
             rocksdb::SequenceNumber end;
@@ -182,45 +209,71 @@ namespace dsn {
             reader.read(end);
             reader.read(edit);
             reader.read(mem_state);
-                        
+
+            ddebug("lastC/DDecree=<%llu,%llu>, meta_size=%d, "
+                   "start=%lld, end=%lld, file_count=%d, mem_state_size=%d",
+                   last_committed_decree(), last_durable_decree(), reader.total_size(),
+                   static_cast<long long int>(start), static_cast<long long int>(end),
+                   state.files.size(), mem_state.size());
+
             if (mem_state.size() == 0 && state.files.size() == 0)
-                return 0;
-            else
             {
-                if (start == 0)
+                // nothing to learn
+                dassert(end == start - 1, "");
+                dassert(end == last_committed_decree(), "");
+                return 0;
+            }
+
+            if (start == 0)
+            {
+                // learn from scratch, should clear db firstly and then re-create it
+
+                // clear db
+                err = close(true);
+                if (err != 0)
                 {
-                    close(true);
-                    open(true);
+                    derror("clear db %s failed, err = %d", data_dir().c_str(), err);
+                    return err;
                 }
 
-                for (auto &f : state.files)
+                // re-create db
+                err = open(true);
+                if (err != 0)
                 {
-                    boost::filesystem::path old_p = learn_dir() + f;
-                    boost::filesystem::path new_p = data_dir() + f;
-
-                    // create directory recursively if necessary
-                    boost::filesystem::path path = new_p;
-                    path = path.remove_filename();
-                    if (!boost::filesystem::exists(path))
-                        boost::filesystem::create_directories(path);
-
-                    boost::filesystem::rename(old_p, new_p);
+                    derror("open db %s failed, err = %d", data_dir().c_str(), err);
+                    return err;
                 }
+            }
 
-                auto status = _db->ApplyLearningState(start, mem_state, edit);
-                if (status.ok())
-                {
-                    _last_committed_decree = end;
-                    printf("ApplyLeraningState lastcommitted in DB %s, <C,D> to <%lld, %lld> with <start,end> as <%lld, %lld>\n",
+            // TODO(qinzuoyan) may overwrite exist files?
+            for (auto &f : state.files)
+            {
+                boost::filesystem::path old_p = learn_dir() + f;
+                boost::filesystem::path new_p = data_dir() + f;
+
+                // create directory recursively if necessary
+                boost::filesystem::path path = new_p;
+                path = path.remove_filename();
+                if (!boost::filesystem::exists(path))
+                    boost::filesystem::create_directories(path);
+
+                boost::filesystem::rename(old_p, new_p);
+            }
+
+            auto status = _db->ApplyLearningState(start, mem_state, edit);
+            if (status.ok())
+            {
+                _last_committed_decree = end;
+                ddebug("lastcommitted in DB %s, <C,D> to <%lld, %lld> with <start,end> as <%lld, %lld>",
                         data_dir().c_str(),
                         static_cast<long long int>(last_committed_decree()),
                         static_cast<long long int>(last_durable_decree()),
                         static_cast<long long int>(start),
                         static_cast<long long int>(end)
-                        );
-                }                    
-                return status.code();
-            }   
+                      );
+            }
+
+            return status.code();
         }
                 
         ::dsn::replication::decree rrdb_service_impl::last_durable_decree() const

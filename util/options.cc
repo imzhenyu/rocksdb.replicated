@@ -303,6 +303,7 @@ void DBOptions::Dump(Logger* log) const {
     Warn(log, "         Options.paranoid_checks: %d", paranoid_checks);
     Warn(log, "                     Options.env: %p", env);
     Warn(log, "                Options.info_log: %p", info_log.get());
+    Warn(log, "          Options.info_log_level: %u", info_log_level);
     Warn(log, "          Options.max_open_files: %d", max_open_files);
     Warn(log, "      Options.max_total_wal_size: %" PRIu64, max_total_wal_size);
     Warn(log, "       Options.disableDataSync: %d", disableDataSync);

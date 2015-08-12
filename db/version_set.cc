@@ -2128,14 +2128,10 @@ void VersionSet::LogAndApplyHelper(ColumnFamilyData* cfd,
     edit->SetPrevLogNumber(prev_log_number_);
   }
   edit->SetNextFile(next_file_number_.load());
+  edit->SetLastSequence(last_sequence_);
 
-  if (!edit->has_last_sequence_) {
-    edit->SetLastSequence(last_sequence_);
-  }
-
-  for (size_t i = 0; i < edit->new_files_.size(); i++) {
-      const FileMetaData& f = edit->new_files_[i].second;
-      *last_durable_seq = std::max(f.largest_seqno, *last_durable_seq);
+  for (const auto& f : edit->new_files_) {
+      *last_durable_seq = std::max(f.second.largest_seqno, *last_durable_seq);
   }
   edit->SetLastDurableSequence(*last_durable_seq);
   
@@ -2198,7 +2194,7 @@ Status VersionSet::Recover(
   bool have_last_sequence = false;
   bool have_last_durable_seq = false;
   uint64_t next_file = 0;
-  uint64_t last_sequence = 0;
+  uint64_t last_sequence __attribute__((unused)) = 0;
   uint64_t last_durable_seq = 0;
   uint64_t log_number = 0;
   uint64_t previous_log_number = 0;
@@ -2414,7 +2410,12 @@ Status VersionSet::Recover(
 
     manifest_file_size_ = current_manifest_file_size;
     next_file_number_.store(next_file + 1);
-    last_sequence_ = last_sequence;
+    // ATTENTION:
+    // Here we should set last_sequence_ to last_durable_seq,
+    // because under replication framework, the disableWAL is set when do write,
+    // so data in memtables but not dumped to sstables will lost, which will be
+    // recovered by the outside replication framework.
+    last_sequence_ = last_durable_seq;
     last_durable_sequence_ = last_durable_seq;
     prev_log_number_ = previous_log_number;
 

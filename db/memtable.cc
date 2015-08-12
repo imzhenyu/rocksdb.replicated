@@ -71,6 +71,7 @@ MemTable::MemTable(const InternalKeyComparator& cmp,
       flush_completed_(false),
       file_number_(0),
       first_seqno_(0),
+      last_seqno_(0),
       earliest_seqno_(earliest_seq),
       mem_next_logfile_number_(0),
       locks_(moptions_.inplace_update_support
@@ -267,7 +268,14 @@ class MemTableIterator: public Iterator {
   }
 
   // return raw key value slice
-  virtual Slice Entry() const  override { return iter_->key(); }
+  // format: varint(key-len) | internal_key | varint(value-len) | value
+  virtual Slice Entry() const  override {
+    assert(Valid());
+    const char* raw_key = iter_->key();
+    Slice key_slice = GetLengthPrefixedSlice(raw_key);
+    Slice value_slice = GetLengthPrefixedSlice(key_slice.data() + key_slice.size());
+    return Slice(raw_key, value_slice.data() + value_slice.size() - raw_key);
+  }
 
   virtual Status status() const override { return Status::OK(); }
 
@@ -355,7 +363,6 @@ void MemTable::Add(SequenceNumber s, ValueType type,
   }
 
   // The first sequence number inserted into the memtable
-  //assert(first_seqno_ == 0 || s > first_seqno_);
   assert(first_seqno_ == 0 || s >= first_seqno_); // == when seqno is shared in batch
   if (first_seqno_ == 0) {
     first_seqno_ = s;
@@ -365,6 +372,8 @@ void MemTable::Add(SequenceNumber s, ValueType type,
     }
     assert(first_seqno_ >= earliest_seqno_);
   }
+  assert(s >= last_seqno_);
+  last_seqno_ = s;
 
   should_flush_ = ShouldFlushNow();
 }

@@ -1927,7 +1927,7 @@ SequenceNumber DBImpl::GetLatestDurableSequenceNumber() const {
 }
 
 // get delta state for learner [start, infinite)
-Status DBImpl::GetLearningState(/*out*/ SequenceNumber& start,
+Status DBImpl::GetLearningState(/*in&out*/ SequenceNumber& start,
     /*out*/ SequenceNumber& end,
     /*out*/ std::string& mem_state,
     /*out*/ std::string& edit_encoded,
@@ -1937,14 +1937,13 @@ Status DBImpl::GetLearningState(/*out*/ SequenceNumber& start,
     mutex_.Lock();
 
     // all state := mem_table +(l0max) level 0 + (l0min) (level 1+)+
-    SequenceNumber last_seq = versions_->last_sequence_;
-    SequenceNumber last_durable_seq = versions_->last_durable_sequence_;
+    SequenceNumber last_seq = versions_->LastSequence();
+    SequenceNumber last_durable_seq = versions_->LastDurableSequence();
     ColumnFamilyData* cfd = versions_->column_family_set_->GetDefault();
 
-    //printf ("GetLearningState start vs last_seq vs durable: %lu vs %lu vs %lu\n", start, 
-    //        versions_->last_sequence_.load(),
-    //        versions_->last_durable_sequence_.load()
-    //        );
+    Log(InfoLogLevel::INFO_LEVEL, db_options_.info_log,
+        "GetLearningState start=%llu, last_seq=%llu, last_durable_seq=%llu",
+        start, last_seq, last_durable_seq);
 
     // invalid 
     // { start > LastSequence + 1 }
@@ -1976,7 +1975,6 @@ Status DBImpl::GetLearningState(/*out*/ SequenceNumber& start,
         if (cfd->imm()->NumNotFlushed() > 0)
         {
             mutex_.Unlock();
-
             // wait for next round learning
             return Status::Busy("flush sstables in progress");
         }
@@ -2025,10 +2023,9 @@ Status DBImpl::GetLearningState(/*out*/ SequenceNumber& start,
                 // { FileSmallestSequenceNumber < start <= FileLargestSequenceNumber }
                 else if (start <= v->largest_seqno)
                 {
-                    // TODO: handle this case
-                    printf("we assume this is impossbile for now as we assume the flush point for level 0 is deterministic"
-                        " as long as the configuration is the same across the replicas.");
-                    return Status::Aborted();
+                    // TODO(qinzuoyan): Currently it is allowed to have duplicated data in
+                    // the sstable when Merge() is not used.
+                    edit.AddFile(0, v);
                 }
 
                 // file sequence range is not covered by [start, infinite)
@@ -2044,6 +2041,10 @@ Status DBImpl::GetLearningState(/*out*/ SequenceNumber& start,
         // { NumLevel0Files == 0 || start < Level0Min }
         else
         {
+            Log(InfoLogLevel::INFO_LEVEL, db_options_.info_log,
+                "GetLearningState start=%llu, NumLevel0Files=%llu, Level0Min=%llu, set start to 0",
+                start, vsi->NumLevelFiles(0),
+                vsi->NumLevelFiles(0) > 0 ? vsi->LevelFiles(0).front()->smallest_seqnolast_durable_seq : 0);
             start = 0;
             for (int i = vsi->base_level(); i >= 0; i--)
             {
@@ -2092,9 +2093,19 @@ Status DBImpl::ApplyLearningState(
         // apply edit first
         if (edit.NumEntries() > 0)
         {
+            Status status = Status::OK();
+
+            // flush memtables firstly and wait done
+            FlushOptions flush_options;
+            flush_options.wait = true;
+            status = FlushMemTable(cfd, flush_options);
+            if (!status.ok())
+            {
+                return status;
+            }
+
             mutex_.Lock();
 
-            Status status = Status::OK();
             const MutableCFOptions mutable_cf_options =
                 *cfd->GetLatestMutableCFOptions();
             
@@ -2166,63 +2177,61 @@ Status DBImpl::GetLearningMemTableState(
     Status s;
     ReadOptions opts;
     Arena arena;
+    std::vector<MemTable*> memtables;
     std::vector<Iterator*> its;
+    std::vector<bool> do_filter;
     size_t reserve_size = 0;
-
-    // add mem iterator
-    its.push_back(cfd->mem()->NewIterator(opts, &arena));
-    reserve_size += cfd->mem()->ApproximateMemoryUsage();
-
-    // add imm iterators
-    cfd->imm()->current()->AddIterators(opts, &its, &arena);
-    reserve_size += cfd->imm()->ApproximateMemoryUsage();
+    memtables.push_back(cfd->mem()); // add current live memtable
+    cfd->imm()->current()->GetMemtableList(&memtables); // add immutable memtables
+    for (auto m : memtables)
+    {
+        if (m->IsEmpty() || start > m->GetLastSequenceNumber())
+        {
+            // this memtable doesn't contains any wanted data, ignore it
+            continue;
+        }
+        its.push_back(m->NewIterator(opts, &arena));
+        // if memtable.first < start <= memtable.last, means need do filter
+        do_filter.push_back(start > m->GetFirstSequenceNumber() ? true : false);
+        reserve_size += m->ApproximateMemoryUsage();
+    }
+    assert(its.size() == do_filter.size());
 
     WriteBatch batch; // use the same batch to share string buffer
     mem_state.reserve(reserve_size);
 
-    for (auto it : its)
+    for (size_t i = 0; i < its.size(); ++i)
     {
+        Iterator* it = its[i];
+        bool filter = do_filter[i];
+
         for (it->SeekToFirst(); it->Valid(); it->Next())
         {
-            // iterator order: <user-key, seq-no(desending), type>
-            // each key() is an AppendInternalKey
+            // iterator order: <user-key(ascending), seq-no(desending), type(desending)>
+            // each key() is an internal_key
+            // each entry() is: varint(key-len) | internal_key | varint(value-len) | value
 
-            // find those bigger updates with seqno > start
-            ParsedInternalKey pkey;
-            if (!ParseInternalKey(it->key(), &pkey))
+            if (filter)
             {
-                // bad data
-                s = Status::Corruption("PerseInternalKey fail when learning memtables");
-                break;
+                // find those updates with seqno >= start
+                ParsedInternalKey pkey;
+                if (!ParseInternalKey(it->key(), &pkey))
+                {
+                    // bad data
+                    s = Status::Corruption("PerseInternalKey fail when learning memtables");
+                    break;
+                }
+
+                if (pkey.sequence < start)
+                {
+                    // ignore obsolate data
+                    continue;
+                }
             }
 
-            if (pkey.sequence < start)
-            {
-                // ignore obsolate data
-                continue;
-            }
-
-            batch.Clear();
-
-            switch (pkey.type)
-            {
-                case kTypeDeletion:
-                    batch.Delete(pkey.user_key);
-                    break;
-                case kTypeValue:
-                    batch.Put(pkey.user_key, it->value());
-                    break;
-                case kTypeMerge:
-                    batch.Merge(pkey.user_key, it->value());
-                    break;
-                default:
-                    assert(false);
-            }
-
-            WriteBatchInternal::SetSequence(&batch, pkey.sequence, true);
-
-            Slice content = WriteBatchInternal::Contents(&batch);
-            PutLengthPrefixedSlice(&mem_state, content);
+            // put entry into mem_state
+            Slice entry = it->Entry();
+            mem_state.append(entry.data(), entry.size());
         }
 
         if (!s.ok())
@@ -2240,6 +2249,23 @@ Status DBImpl::GetLearningMemTableState(
     return s;
 }
 
+struct MemtableEntry
+{
+    ParsedInternalKey key;
+    Slice value;
+
+    bool Parse(Slice* input) {
+        Slice key_slice;
+        if (!GetLengthPrefixedSlice(input, &key_slice))
+            return false;
+        if (!ParseInternalKey(key_slice, &key))
+            return false;
+        if (!GetLengthPrefixedSlice(input, &value))
+            return false;
+        return true;
+    }
+};
+
 Status DBImpl::ApplyLearningMemTableState(
     SequenceNumber start,
     std::string& mem_state
@@ -2249,47 +2275,55 @@ Status DBImpl::ApplyLearningMemTableState(
     WriteOptions opts;
     opts.disableWAL = true;
 
-    std::multimap<SequenceNumber, Slice> batches;
-
+    std::multimap<SequenceNumber, MemtableEntry> batches;
     while (!contents.empty())
     {
-        Slice content;
-        if (!GetLengthPrefixedSlice(&contents, &content))
+        MemtableEntry entry;
+        if (!entry.Parse(&contents))
             return Status::Corruption("parse data fail when apply learning memtables");
-
-        SequenceNumber seq = DecodeFixed64(content.data());
-        batches.insert(std::multimap<SequenceNumber, Slice>::value_type(seq, content));
+        assert(entry.key.sequence >= start);
+        batches.insert(std::multimap<SequenceNumber, MemtableEntry>::value_type(entry.key.sequence, entry));
     }
 
-    WriteBatch batch;
-    WriteBatch batch_tmp;
-    SequenceNumber lastSeq = 0;
+    WriteBatch batch; // reuse batch to share string buffer
+    SequenceNumber lastSeq = kMaxSequenceNumber;
     for (auto& kv : batches)
     {
-        if (kv.first == lastSeq)
+        if (kv.first != lastSeq)
         {
-            batch_tmp.Clear();
-            WriteBatchInternal::SetContents(&batch_tmp, kv.second);
-            WriteBatchInternal::Append(&batch, &batch_tmp);
-            continue;
+            // new batch, write the old batch firstly
+            if (batch.Count() > 0) {
+                WriteBatchInternal::SetSequence(&batch, lastSeq, true);
+                opts.given_sequence_number = lastSeq;
+                assert(opts.given_sequence_number > versions_->LastSequence());
+                auto status = Write(opts, &batch);
+                if (!status.ok())
+                    return status;
+                Log(InfoLogLevel::DEBUG_LEVEL, db_options_.info_log,
+                        "apply memtable seq_no=%lld", lastSeq);
+            }
+            lastSeq = kv.first;
+            batch.Clear();
         }
 
-        if (batch.Count() > 0)
+        const MemtableEntry& entry = kv.second;
+        switch (entry.key.type)
         {
-            WriteBatchInternal::SetSequence(&batch, lastSeq, true);
-            opts.given_sequence_number = lastSeq;
-            assert(opts.given_sequence_number > versions_->LastSequence());
-            auto status = Write(opts, &batch);
-            if (!status.ok())
-                return status;
+        case kTypeDeletion:
+            batch.Delete(entry.key.user_key);
+            break;
+        case kTypeValue:
+            batch.Put(entry.key.user_key, entry.value);
+            break;
+        case kTypeMerge:
+            batch.Merge(entry.key.user_key, entry.value);
+            break;
+        default:
+            return Status::Corruption("invalid type when apply learning memtables");
         }
-
-        lastSeq = kv.first;
-        batch.Clear();
-        WriteBatchInternal::SetContents(&batch, kv.second);
     }
 
-    // the last batch
+    // write the last batch
     if (batch.Count() > 0)
     {
         WriteBatchInternal::SetSequence(&batch, lastSeq, true);
@@ -2298,6 +2332,8 @@ Status DBImpl::ApplyLearningMemTableState(
         auto status = Write(opts, &batch);
         if (!status.ok())
             return status;
+        Log(InfoLogLevel::DEBUG_LEVEL, db_options_.info_log,
+                "apply memtable seq_no=%lld", lastSeq);
     }
 
     return Status::OK();
@@ -3912,6 +3948,13 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
         }
       }
 
+      // TODO(qinzuoyan) fix the following problem:
+      // Under concurrent env, maybe write_batch_group.size() > 1, then
+      // all the writes always use the first write's sequence_number.
+      // That means, the non-first writes's given_sequence_number are discarded.
+      // Here doesn't cause any problem, because replication framework always
+      // calls this method serially (in a single thread), so the batch count
+      // is always 1.
       const SequenceNumber current_sequence = write_options.given_sequence_number == 0 ?
           (last_sequence + 1) : write_options.given_sequence_number;
       assert(current_sequence > last_sequence);
