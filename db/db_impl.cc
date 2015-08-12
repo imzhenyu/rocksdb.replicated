@@ -2044,7 +2044,7 @@ Status DBImpl::GetLearningState(/*in&out*/ SequenceNumber& start,
             Log(InfoLogLevel::INFO_LEVEL, db_options_.info_log,
                 "GetLearningState start=%llu, NumLevel0Files=%llu, Level0Min=%llu, set start to 0",
                 start, vsi->NumLevelFiles(0),
-                vsi->NumLevelFiles(0) > 0 ? vsi->LevelFiles(0).front()->smallest_seqnolast_durable_seq : 0);
+                vsi->NumLevelFiles(0) > 0 ? vsi->LevelFiles(0).front()->smallest_seqno : 0);
             start = 0;
             for (int i = vsi->base_level(); i >= 0; i--)
             {

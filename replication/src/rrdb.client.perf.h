@@ -33,12 +33,14 @@ public:
         load_suite_config(s);
         suits.push_back(s);
         
+        /*
         s.name = "rrdb.merge";
         s.config_section = "task.RPC_RRDB_RRDB_MERGE";
         s.send_one = [this](int payload_bytes){this->send_one_merge(payload_bytes); };
         s.cases.clear();
         load_suite_config(s);
         suits.push_back(s);
+        */
         
         s.name = "rrdb.get";
         s.config_section = "task.RPC_RRDB_RRDB_GET";
