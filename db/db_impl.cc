@@ -1927,7 +1927,8 @@ SequenceNumber DBImpl::GetLatestDurableSequenceNumber() const {
 }
 
 // get delta state for learner [start, infinite)
-Status DBImpl::GetLearningState(/*in&out*/ SequenceNumber& start,
+Status DBImpl::GetLearningState(
+    /*in & out*/ SequenceNumber& start,
     /*out*/ SequenceNumber& end,
     /*out*/ std::string& mem_state,
     /*out*/ std::string& edit_encoded,
@@ -1944,6 +1945,15 @@ Status DBImpl::GetLearningState(/*in&out*/ SequenceNumber& start,
     Log(InfoLogLevel::INFO_LEVEL, db_options_.info_log,
         "GetLearningState start=%llu, last_seq=%llu, last_durable_seq=%llu",
         start, last_seq, last_durable_seq);
+
+    // invalid
+    // { start == 0 }
+    if (start == 0)
+    {
+        mutex_.Unlock();
+
+        return Status::InvalidArgument("Invalid start sequence 0");
+    }
 
     // invalid 
     // { start > LastSequence + 1 }
@@ -1980,10 +1990,14 @@ Status DBImpl::GetLearningState(/*in&out*/ SequenceNumber& start,
         }
         */
 
-        auto status = GetLearningMemTableState(start, mem_state);
+        SequenceNumber mem_end;
+        auto status = GetLearningMemTableState(start, mem_end, mem_state);
 
         if (status.ok())
-            end = last_seq;
+        {
+            assert(mem_end == last_seq);
+            end = mem_end;
+        }
 
         mutex_.Unlock();
 
@@ -2074,6 +2088,7 @@ Status DBImpl::GetLearningState(/*in&out*/ SequenceNumber& start,
 // apply delta state for learnee [start, infinite)
 Status DBImpl::ApplyLearningState(
     SequenceNumber start,
+    SequenceNumber end,
     std::string& mem_state,
     std::string& edit_encoded
     )
@@ -2109,8 +2124,8 @@ Status DBImpl::ApplyLearningState(
             const MutableCFOptions mutable_cf_options =
                 *cfd->GetLatestMutableCFOptions();
             
-            //update new file numbers if necessary
-            auto new_files = edit.GetNewFiles();
+            // update new file numbers if necessary
+            auto& new_files = edit.GetNewFiles();
             uint64_t min_fno = ~0ULL, max_fno = 0;
             for (auto& kv : new_files)
             {
@@ -2126,7 +2141,7 @@ Status DBImpl::ApplyLearningState(
                 for (auto& kv : new_files)
                 {
                     auto& nf = kv.second;
-                    std::string oldfn = MakeTableFileName(dbname_, nf.fd.GetNumber());
+                    std::string oldfn = MakeTableFileName(dbname_, nf.fd.GetNumber()) + ".learn";
                     std::string newfn = MakeTableFileName(dbname_, nf.fd.GetNumber() + fno_inc);
 
                     status = env_->RenameFile(oldfn, newfn);
@@ -2143,6 +2158,24 @@ Status DBImpl::ApplyLearningState(
                 // increase fno to prevent future confliction
                 while (versions_->NewFileNumber() <= fno_inc + max_fno);
             }
+            else
+            {
+                // just rename 'xxx.sst.learn' to 'xxx.sst'
+                for (auto& kv : new_files)
+                {
+                    auto& nf = kv.second;
+                    std::string oldfn = MakeTableFileName(dbname_, nf.fd.GetNumber()) + ".learn";
+                    std::string newfn = MakeTableFileName(dbname_, nf.fd.GetNumber());
+
+                    status = env_->RenameFile(oldfn, newfn);
+                    if (!status.ok())
+                    {
+                        // TODO: delete obsolete files?
+                        mutex_.Unlock();
+                        return status;
+                    }
+                }
+            }
 
             status = versions_->LogAndApply(cfd, mutable_cf_options, &edit, &mutex_);
             if (!status.ok())
@@ -2157,7 +2190,7 @@ Status DBImpl::ApplyLearningState(
     // apply memory state if state learned
     Status st;
     if (mem_state.size() > 0)
-        st = ApplyLearningMemTableState(start, mem_state);
+        st = ApplyLearningMemTableState(start, end, mem_state);
     else 
         st = Status::OK();
    
@@ -2166,6 +2199,7 @@ Status DBImpl::ApplyLearningState(
 
 Status DBImpl::GetLearningMemTableState(
     SequenceNumber start,
+    SequenceNumber& end,
     /*out*/ std::string& mem_state
     )
 {
@@ -2183,6 +2217,7 @@ Status DBImpl::GetLearningMemTableState(
     size_t reserve_size = 0;
     memtables.push_back(cfd->mem()); // add current live memtable
     cfd->imm()->current()->GetMemtableList(&memtables); // add immutable memtables
+    end = start - 1;
     for (auto m : memtables)
     {
         if (m->IsEmpty() || start > m->GetLastSequenceNumber())
@@ -2194,12 +2229,11 @@ Status DBImpl::GetLearningMemTableState(
         // if memtable.first < start <= memtable.last, means need do filter
         do_filter.push_back(start > m->GetFirstSequenceNumber() ? true : false);
         reserve_size += m->ApproximateMemoryUsage();
+        end = std::max(end, m->GetLastSequenceNumber());
     }
     assert(its.size() == do_filter.size());
 
-    WriteBatch batch; // use the same batch to share string buffer
     mem_state.reserve(reserve_size);
-
     for (size_t i = 0; i < its.size(); ++i)
     {
         Iterator* it = its[i];
@@ -2236,6 +2270,7 @@ Status DBImpl::GetLearningMemTableState(
 
         if (!s.ok())
         {
+            end = start - 1;
             mem_state.clear();
             break;
         }
@@ -2268,6 +2303,7 @@ struct MemtableEntry
 
 Status DBImpl::ApplyLearningMemTableState(
     SequenceNumber start,
+    SequenceNumber end,
     std::string& mem_state
     )
 {
@@ -2284,6 +2320,12 @@ Status DBImpl::ApplyLearningMemTableState(
         assert(entry.key.sequence >= start);
         batches.insert(std::multimap<SequenceNumber, MemtableEntry>::value_type(entry.key.sequence, entry));
     }
+    assert(batches.size() > 0);
+    assert(batches.rbegin()->first == end);
+
+    Log(InfoLogLevel::DEBUG_LEVEL, db_options_.info_log,
+        "apply memtable: param <start,end> is <%llu,%llu>, mem_state <min,max> is <%llu,%llu>",
+        start, end, batches.begin()->first, batches.rbegin()->first);
 
     WriteBatch batch; // reuse batch to share string buffer
     SequenceNumber lastSeq = kMaxSequenceNumber;
@@ -2299,8 +2341,6 @@ Status DBImpl::ApplyLearningMemTableState(
                 auto status = Write(opts, &batch);
                 if (!status.ok())
                     return status;
-                Log(InfoLogLevel::DEBUG_LEVEL, db_options_.info_log,
-                        "apply memtable seq_no=%lld", lastSeq);
             }
             lastSeq = kv.first;
             batch.Clear();
@@ -2332,8 +2372,6 @@ Status DBImpl::ApplyLearningMemTableState(
         auto status = Write(opts, &batch);
         if (!status.ok())
             return status;
-        Log(InfoLogLevel::DEBUG_LEVEL, db_options_.info_log,
-                "apply memtable seq_no=%lld", lastSeq);
     }
 
     return Status::OK();
@@ -3955,6 +3993,7 @@ Status DBImpl::WriteImpl(const WriteOptions& write_options,
       // Here doesn't cause any problem, because replication framework always
       // calls this method serially (in a single thread), so the batch count
       // is always 1.
+      assert(WriteBatchInternal::Count(updates) == 1);
       const SequenceNumber current_sequence = write_options.given_sequence_number == 0 ?
           (last_sequence + 1) : write_options.given_sequence_number;
       assert(current_sequence > last_sequence);

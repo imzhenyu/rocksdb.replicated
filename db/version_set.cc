@@ -2130,8 +2130,13 @@ void VersionSet::LogAndApplyHelper(ColumnFamilyData* cfd,
   edit->SetNextFile(next_file_number_.load());
   edit->SetLastSequence(last_sequence_);
 
+  if (edit->has_last_durable_sequence_) {
+    // FlushJob may set the last_durable_sequence, which may be greater than any
+    // largest_seqno of all sstables if some writes were discarded when do flush.
+    *last_durable_seq = std::max(edit->last_durable_sequence_, *last_durable_seq);
+  }
   for (const auto& f : edit->new_files_) {
-      *last_durable_seq = std::max(f.second.largest_seqno, *last_durable_seq);
+    *last_durable_seq = std::max(f.second.largest_seqno, *last_durable_seq);
   }
   edit->SetLastDurableSequence(*last_durable_seq);
   

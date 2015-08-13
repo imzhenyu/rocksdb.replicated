@@ -173,17 +173,20 @@ class DBImpl : public DB {
   // apply delta state for learnee [start, infinite)
   virtual Status ApplyLearningState(
       SequenceNumber start,
+      SequenceNumber end,
       std::string& mem_state,
       std::string& edit_encoded
       ) override;
 
   Status GetLearningMemTableState(
       SequenceNumber start,
+      SequenceNumber& end,
       /*out*/ std::string& mem_state
       );
 
   Status ApplyLearningMemTableState(
       SequenceNumber start,
+      SequenceNumber end,
       std::string& mem_state
       );
   

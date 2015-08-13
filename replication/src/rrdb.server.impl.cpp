@@ -184,7 +184,7 @@ namespace dsn {
                 ddebug("lastC/DDecree=<%llu,%llu>, meta_size=%d, "
                        "start=%lld, end=%lld, file_count=%d, mem_state_size=%d",
                        last_committed_decree(), last_durable_decree(), writer.total_size(),
-                       static_cast<long long int>(start), static_cast<long long int>(end),
+                       static_cast<long long int>(start0), static_cast<long long int>(end),
                        state.files.size(), mem_state.size());
 
                 state.meta.push_back(writer.get_buffer());
@@ -227,6 +227,7 @@ namespace dsn {
             if (start == 0)
             {
                 // learn from scratch, should clear db firstly and then re-create it
+                ddebug("start == 0, learn from scratch, clear db and then re-create it");
 
                 // clear db
                 err = close(true);
@@ -245,11 +246,12 @@ namespace dsn {
                 }
             }
 
-            // TODO(qinzuoyan) may overwrite exist files?
+            // rename 'learn_dir/xxx.sst' to 'data_dir/xxx.sst.learn' to avoid conflicting
+            // with exist files.
             for (auto &f : state.files)
             {
                 boost::filesystem::path old_p = learn_dir() + f;
-                boost::filesystem::path new_p = data_dir() + f;
+                boost::filesystem::path new_p = data_dir() + f + ".learn";
 
                 // create directory recursively if necessary
                 boost::filesystem::path path = new_p;
@@ -257,19 +259,31 @@ namespace dsn {
                 if (!boost::filesystem::exists(path))
                     boost::filesystem::create_directories(path);
 
-                boost::filesystem::rename(old_p, new_p);
+                try
+                {
+                    boost::filesystem::rename(old_p, new_p);
+                }
+                catch (const boost::filesystem::filesystem_error& e)
+                {
+                    // TODO(qinzuoyan) delete garbage files
+                    derror("rename %s to %s failed, err = %s",
+                           old_p.string().c_str(), new_p.string().c_str(), e.what());
+                    dassert(e.code().value() != 0, "");
+                    return e.code().value();
+                }
             }
 
-            auto status = _db->ApplyLearningState(start, mem_state, edit);
+            auto status = _db->ApplyLearningState(start, end, mem_state, edit);
             if (status.ok())
             {
                 _last_committed_decree = end;
-                ddebug("lastcommitted in DB %s, <C,D> to <%lld, %lld> with <start,end> as <%lld, %lld>",
-                        data_dir().c_str(),
-                        static_cast<long long int>(last_committed_decree()),
-                        static_cast<long long int>(last_durable_decree()),
-                        static_cast<long long int>(start),
-                        static_cast<long long int>(end)
+                ddebug("after ApplyLearningState in DB %s, "
+                       "updated <C,D> to <%lld, %lld> with <start,end> as <%lld, %lld>",
+                       data_dir().c_str(),
+                       static_cast<long long int>(last_committed_decree()),
+                       static_cast<long long int>(last_durable_decree()),
+                       static_cast<long long int>(start),
+                       static_cast<long long int>(end)
                       );
             }
 

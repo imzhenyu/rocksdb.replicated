@@ -554,6 +554,7 @@ class DB {
   // apply delta state for learnee [start, infinite)
   virtual Status ApplyLearningState(
       SequenceNumber start,
+      SequenceNumber end,
       std::string& mem_state,
       std::string& edit_encoded
       )
