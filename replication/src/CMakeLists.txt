@@ -31,7 +31,7 @@ set(MY_PROJ_INC_PATH "../../include")
 set(MY_PROJ_LIBS dsn.replication dsn.replication.meta_server dsn.replication.clientlib dsn.failure_detector rocksdb)
 
 if (UNIX)
-	set(MY_PROJ_LIBS ${MY_PROJ_LIBS} z bz2 lz4 snappy)
+	set(MY_PROJ_LIBS ${MY_PROJ_LIBS} z bz2 lz4 snappy rt aio pthread)
 endif()
 
 set(MY_PROJ_LIB_PATH "../../")
@@ -39,7 +39,7 @@ set(MY_PROJ_LIB_PATH "../../")
 # Extra files that will be installed
 set(MY_BINPLACES "${CMAKE_CURRENT_SOURCE_DIR}/*.ini")
 
-set(MY_BOOST_PACKAGES "")
+set(MY_BOOST_PACKAGES system filesystem)
 
 dsn_common_setup()
 dsn_add_executable()

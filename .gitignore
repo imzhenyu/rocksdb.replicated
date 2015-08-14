@@ -3,7 +3,9 @@ rocksdb.replicated.creator
 rocksdb.replicated.creator.user
 rocksdb.replicated.files
 rocksdb.replicated.includes
-replication/src/builder
+replication/src/builder/
+replication/src/runner/
+db_sanity_test.dir/
 
 TARGETS
 make_config.mk
