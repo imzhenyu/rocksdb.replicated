@@ -29,7 +29,7 @@ public:
         ::dsn::replication::replication_app_client_base::load_meta_servers(cf, meta_servers);
         
         _rrdb_client = new rrdb_client(meta_servers, argv[1]);
-        _timer = ::dsn::service::tasking::enqueue(LPC_RRDB_TEST_TIMER, this, &rrdb_client_app::on_test_timer, 0, 0, 1000);
+        _timer = ::dsn::service::tasking::enqueue(LPC_RRDB_TEST_TIMER, this, &rrdb_client_app::on_test_timer, 0, 0, 100);
         return ::dsn::ERR_OK;
     }
 

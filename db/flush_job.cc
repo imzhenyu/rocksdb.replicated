@@ -140,6 +140,8 @@ Status FlushJob::Run(FileMetaData* file_meta) {
   // SetLogNumber(log_num) indicates logs with number smaller than log_num
   // will no longer be picked up for recovery.
   edit->SetLogNumber(mems.back()->GetNextLogNumber());
+  // SetLastDurableSequence(seq_no) indicates the last sequence number flushed.
+  edit->SetLastDurableSequence(mems.back()->GetLastSequenceNumber());
   edit->SetColumnFamily(cfd_->GetID());
 
   // This will release and re-acquire the mutex.

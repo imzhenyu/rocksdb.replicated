@@ -18,7 +18,7 @@ int main(int argc, char** argv)
     dsn::service::system::register_service<::dsn::replication::meta_service_app>("meta");
     dsn::service::system::register_service<::dsn::replication::replication_service_app>("replica");
     dsn::service::system::register_service<::dsn::apps::rrdb_client_app>("client");
-    dsn::service::system::register_service<::dsn::apps::rrdb_perf_test_client_app>("client.rrdb.perf.test");
+    dsn::service::system::register_service<::dsn::apps::rrdb_perf_test_client_app>("client.perf");
 
     // register all possible tools and toollets
     dsn::tools::register_tool<dsn::tools::nativerun>("nativerun");
