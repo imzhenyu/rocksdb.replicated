@@ -8,12 +8,12 @@ namespace dsn {
         class rrdb_service_impl : public rrdb_service
         {
         public:
-            rrdb_service_impl(::dsn::replication::replica* replica, ::dsn::configuration_ptr& config);
+            rrdb_service_impl(::dsn::replication::replica* replica);
 
-            virtual void on_put(const update_request& update, ::dsn::service::rpc_replier<int>& reply);
-            virtual void on_remove(const ::dsn::blob& key, ::dsn::service::rpc_replier<int>& reply);
-            virtual void on_merge(const update_request& update, ::dsn::service::rpc_replier<int>& reply);
-            virtual void on_get(const ::dsn::blob& key, ::dsn::service::rpc_replier<read_response>& reply);
+            virtual void on_put(const update_request& update, ::dsn::rpc_replier<int>& reply);
+            virtual void on_remove(const ::dsn::blob& key, ::dsn::rpc_replier<int>& reply);
+            virtual void on_merge(const update_request& update, ::dsn::rpc_replier<int>& reply);
+            virtual void on_get(const ::dsn::blob& key, ::dsn::rpc_replier<read_response>& reply);
 
             virtual int  open(bool create_new);
             virtual int  close(bool clear_state);

@@ -1,13 +1,7 @@
 // apps
 # include "rrdb.app.example.h"
 # include "rrdb.server.impl.h"
-
-// tools
-# include <dsn/tool/simulator.h>
-# include <dsn/tool/nativerun.h>
-# include <dsn/toollet/tracer.h>
-# include <dsn/toollet/profiler.h>
-# include <dsn/toollet/fault_injector.h>
+# include "rrdb.check.h"
 
 int main(int argc, char** argv)
 {
@@ -15,19 +9,18 @@ int main(int argc, char** argv)
     dsn::replication::register_replica_provider<::dsn::apps::rrdb_service_impl>("rrdb");
 
     // register all possible services
-    dsn::service::system::register_service<::dsn::replication::meta_service_app>("meta");
-    dsn::service::system::register_service<::dsn::replication::replication_service_app>("replica");
-    dsn::service::system::register_service<::dsn::apps::rrdb_client_app>("client");
-    dsn::service::system::register_service<::dsn::apps::rrdb_perf_test_client_app>("client.perf");
+    dsn::register_app<::dsn::replication::meta_service_app>("meta");
+    dsn::register_app<::dsn::replication::replication_service_app>("replica");
+    dsn::register_app<::dsn::apps::rrdb_client_app>("client");
+    dsn::register_app<::dsn::apps::rrdb_perf_test_client_app>("client.perf");
 
-    // register all possible tools and toollets
-    dsn::tools::register_tool<dsn::tools::nativerun>("nativerun");
-    dsn::tools::register_tool<dsn::tools::simulator>("simulator");
-    dsn::tools::register_toollet<dsn::tools::tracer>("tracer");
-    dsn::tools::register_toollet<dsn::tools::profiler>("profiler");
-    dsn::tools::register_toollet<dsn::tools::fault_injector>("fault_injector");
+    // register global checker if necesary
+    dsn_register_app_checker("rrdb.checker",
+        ::dsn::apps::rrdb_checker::create<::dsn::apps::rrdb_checker>,
+        ::dsn::apps::rrdb_checker::apply
+        );
 
     // specify what services and tools will run in config file, then run
-    dsn::service::system::run(--argc, ++argv, true);
+    dsn_run(argc, argv, true);
     return 0;
 }

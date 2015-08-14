@@ -8,8 +8,8 @@
 
 namespace dsn {
     namespace apps {
-        rrdb_service_impl::rrdb_service_impl(::dsn::replication::replica* replica, ::dsn::configuration_ptr& config)
-            : rrdb_service(replica, config)
+        rrdb_service_impl::rrdb_service_impl(::dsn::replication::replica* replica)
+            : rrdb_service(replica)
         {
             _is_open = false;
 
@@ -25,13 +25,12 @@ namespace dsn {
             update.key = blob("empty-0xdeadbeef", 0, 16);
             update.value = blob("empty", 0, 5);
 
-            ::dsn::message_ptr nil = nullptr;
-            ::dsn::service::rpc_replier<int> reply(nil, nil);
+            ::dsn::rpc_replier<int> reply(nullptr);
 
             on_put(update, reply);
         }
 
-        void rrdb_service_impl::on_put(const update_request& update, ::dsn::service::rpc_replier<int>& reply)
+        void rrdb_service_impl::on_put(const update_request& update, ::dsn::rpc_replier<int>& reply)
         {
             dassert(_is_open, "rrdb service %s is not ready", data_dir().c_str());
             
@@ -48,7 +47,7 @@ namespace dsn {
             ++_last_committed_decree;
         }
 
-        void rrdb_service_impl::on_remove(const ::dsn::blob& key, ::dsn::service::rpc_replier<int>& reply)
+        void rrdb_service_impl::on_remove(const ::dsn::blob& key, ::dsn::rpc_replier<int>& reply)
         {
             dassert(_is_open, "rrdb service %s is not ready", data_dir().c_str());
             
@@ -64,7 +63,7 @@ namespace dsn {
             ++_last_committed_decree;
         }
 
-        void rrdb_service_impl::on_merge(const update_request& update, ::dsn::service::rpc_replier<int>& reply)
+        void rrdb_service_impl::on_merge(const update_request& update, ::dsn::rpc_replier<int>& reply)
         {
             dassert(_is_open, "rrdb service %s is not ready", data_dir().c_str());
             
@@ -85,7 +84,7 @@ namespace dsn {
             ++_last_committed_decree;
         }
 
-        void rrdb_service_impl::on_get(const ::dsn::blob& key, ::dsn::service::rpc_replier<read_response>& reply)
+        void rrdb_service_impl::on_get(const ::dsn::blob& key, ::dsn::rpc_replier<read_response>& reply)
         {
             dassert(_is_open, "rrdb service %s is not ready", data_dir().c_str());
 

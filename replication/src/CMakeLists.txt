@@ -1,21 +1,45 @@
 cmake_minimum_required(VERSION 2.8.8)
 
-#set(DSN_ROOT "e:\\rDSN")
-set(DSN_ROOT "${CMAKE_SOURCE_DIR}/../../../rDSN/builder/output")
+if(UNIX)
+	set(DSN_ROOT "${CMAKE_SOURCE_DIR}/../../../rDSN/builder/output")
+else()
+	set(DSN_ROOT "E:/rDSN")	
+endif()
+
 if(NOT EXISTS "${DSN_ROOT}/")
     message(FATAL_ERROR "Please make sure that ${DSN_ROOT} exists.")
 endif()
 
 include("${DSN_ROOT}/bin/dsn.cmake")
 
-set(DSN_APP_TARGET "rrdb")
-project(${DSN_APP_TARGET} C CXX)
 set(DSN_BUILD_RUNTIME 0)
-set(DSN_EXTRA_BOOST_PACKAGES "")
-set(DSN_EXTRA_INCLUDEDIR "../../include")
-set(DSN_EXTRA_LIBRARYDIR "../../")
-set(DSN_EXTRA_LIBS dsn.replication dsn.replication.meta_server dsn.replication.clientlib dsn.failure_detector rocksdb z bz2 lz4 snappy)
-set(DSN_EXTRA_SRC "")
+
+set(MY_PROJ_NAME "rrdb")
+project(${MY_PROJ_NAME} C CXX)
+
+# Source files under CURRENT project directory will be automatically included.
+# You can manually set MY_PROJ_SRC to include source files under other directories.
+set(MY_PROJ_SRC "")
+
+# Search mode for source files under CURRENT project directory?
+# "GLOB_RECURSE" for recursive search
+# "GLOB" for non-recursive search
+set(MY_SRC_SEARCH_MODE "GLOB")
+
+set(MY_PROJ_INC_PATH "../../include")
+
+set(MY_PROJ_LIBS dsn.replication dsn.replication.meta_server dsn.replication.clientlib dsn.failure_detector rocksdb)
+
+if (UNIX)
+	set(MY_PROJ_LIBS ${MY_PROJ_LIBS} z bz2 lz4 snappy)
+endif()
+
+set(MY_PROJ_LIB_PATH "../../")
+
+# Extra files that will be installed
+set(MY_BINPLACES "${CMAKE_CURRENT_SOURCE_DIR}/*.ini")
+
+set(MY_BOOST_PACKAGES "")
+
 dsn_common_setup()
-file(GLOB BINPLACE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.ini")
-dsn_add_executable(${DSN_APP_TARGET} "${BINPLACE_FILES}")
+dsn_add_executable()

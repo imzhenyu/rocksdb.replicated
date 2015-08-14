@@ -10,7 +10,7 @@
 //
 // # define DSN_NOT_USE_DEFAULT_SERIALIZATION
 
-# include <dsn/internal/serialization.h>
+# include <dsn/service_api_cpp.h>
 
 # ifdef DSN_NOT_USE_DEFAULT_SERIALIZATION
 
@@ -19,7 +19,7 @@
 
 namespace dsn { namespace apps { 
     // ---------- update_request -------------
-    inline void marshall(::dsn::binary_writer& writer, const update_request& val, uint16_t pos = 0xffff)
+    inline void marshall(::dsn::binary_writer& writer, const update_request& val)
     {
         boost::shared_ptr<::dsn::binary_writer_transport> transport(new ::dsn::binary_writer_transport(writer));
         ::apache::thrift::protocol::TBinaryProtocol proto(transport);
@@ -34,7 +34,7 @@ namespace dsn { namespace apps {
     };
 
     // ---------- read_response -------------
-    inline void marshall(::dsn::binary_writer& writer, const read_response& val, uint16_t pos = 0xffff)
+    inline void marshall(::dsn::binary_writer& writer, const read_response& val)
     {
         boost::shared_ptr<::dsn::binary_writer_transport> transport(new ::dsn::binary_writer_transport(writer));
         ::apache::thrift::protocol::TBinaryProtocol proto(transport);
@@ -61,10 +61,10 @@ namespace dsn { namespace apps {
         ::dsn::blob value;
     };
 
-    inline void marshall(::dsn::binary_writer& writer, const update_request& val, uint16_t pos = 0xffff)
+    inline void marshall(::dsn::binary_writer& writer, const update_request& val)
     {
-        marshall(writer, val.key, pos);
-        marshall(writer, val.value, pos);
+        marshall(writer, val.key);
+        marshall(writer, val.value);
     };
 
     inline void unmarshall(::dsn::binary_reader& reader, __out_param update_request& val)
@@ -80,10 +80,10 @@ namespace dsn { namespace apps {
         std::string value;
     };
 
-    inline void marshall(::dsn::binary_writer& writer, const read_response& val, uint16_t pos = 0xffff)
+    inline void marshall(::dsn::binary_writer& writer, const read_response& val)
     {
-        marshall(writer, val.error, pos);
-        marshall(writer, val.value, pos);
+        marshall(writer, val.error);
+        marshall(writer, val.value);
     };
 
     inline void unmarshall(::dsn::binary_reader& reader, __out_param read_response& val)

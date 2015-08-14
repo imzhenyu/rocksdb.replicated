@@ -8,8 +8,8 @@ class rrdb_service
     : public ::dsn::replication::replication_app_base
 {
 public:
-    rrdb_service(::dsn::replication::replica* replica, ::dsn::configuration_ptr& config) 
-        : ::dsn::replication::replication_app_base(replica, config)
+    rrdb_service(::dsn::replication::replica* replica) 
+        : ::dsn::replication::replication_app_base(replica)
     {
         open_service();
     }
@@ -22,28 +22,28 @@ public:
 protected:
     // all service handlers to be implemented further
     // RPC_RRDB_RRDB_PUT 
-    virtual void on_put(const update_request& update, ::dsn::service::rpc_replier<int>& reply)
+    virtual void on_put(const update_request& update, ::dsn::rpc_replier<int>& reply)
     {
         std::cout << "... exec RPC_RRDB_RRDB_PUT ... (not implemented) " << std::endl;
         int resp;
         reply(resp);
     }
     // RPC_RRDB_RRDB_REMOVE 
-    virtual void on_remove(const ::dsn::blob& key, ::dsn::service::rpc_replier<int>& reply)
+    virtual void on_remove(const ::dsn::blob& key, ::dsn::rpc_replier<int>& reply)
     {
         std::cout << "... exec RPC_RRDB_RRDB_REMOVE ... (not implemented) " << std::endl;
         int resp;
         reply(resp);
     }
     // RPC_RRDB_RRDB_MERGE 
-    virtual void on_merge(const update_request& update, ::dsn::service::rpc_replier<int>& reply)
+    virtual void on_merge(const update_request& update, ::dsn::rpc_replier<int>& reply)
     {
         std::cout << "... exec RPC_RRDB_RRDB_MERGE ... (not implemented) " << std::endl;
         int resp;
         reply(resp);
     }
     // RPC_RRDB_RRDB_GET 
-    virtual void on_get(const ::dsn::blob& key, ::dsn::service::rpc_replier<read_response>& reply)
+    virtual void on_get(const ::dsn::blob& key, ::dsn::rpc_replier<read_response>& reply)
     {
         std::cout << "... exec RPC_RRDB_RRDB_GET ... (not implemented) " << std::endl;
         read_response resp;

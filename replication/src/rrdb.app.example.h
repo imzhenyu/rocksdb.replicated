@@ -5,11 +5,12 @@
 
 namespace dsn { namespace apps { 
 // client app example
-class rrdb_client_app : public ::dsn::service::service_app, public virtual ::dsn::service::servicelet
+class rrdb_client_app : 
+    public ::dsn::service_app,
+    public virtual ::dsn::servicelet
 {
 public:
-    rrdb_client_app(::dsn::service_app_spec* s) 
-        : ::dsn::service::service_app(s) 
+    rrdb_client_app()
     {
         _rrdb_client = nullptr;
     }
@@ -24,12 +25,11 @@ public:
         if (argc < 2)
             return ::dsn::ERR_INVALID_PARAMETERS;
 
-        std::vector<::dsn::end_point> meta_servers;
-        auto cf = ::dsn::service::system::config();
-        ::dsn::replication::replication_app_client_base::load_meta_servers(cf, meta_servers);
+        std::vector<dsn_address_t> meta_servers;
+        ::dsn::replication::replication_app_client_base::load_meta_servers(meta_servers);
         
         _rrdb_client = new rrdb_client(meta_servers, argv[1]);
-        _timer = ::dsn::service::tasking::enqueue(LPC_RRDB_TEST_TIMER, this, &rrdb_client_app::on_test_timer, 0, 0, 100);
+        _timer = ::dsn::tasking::enqueue(LPC_RRDB_TEST_TIMER, this, &rrdb_client_app::on_test_timer, 0, 0, 100);
         return ::dsn::ERR_OK;
     }
 
@@ -67,8 +67,6 @@ public:
             //_rrdb_client->begin_remove(req);
            
         }
-        /*
-        // Merge is valid only when merge operator is provided when open the db.
         {
             update_request req;
             //sync:
@@ -79,7 +77,6 @@ public:
             //_rrdb_client->begin_merge(req);
            
         }
-        */
         {
             ::dsn::blob req;
             //sync:
@@ -94,16 +91,17 @@ public:
 
 private:
     ::dsn::task_ptr _timer;
-    ::dsn::end_point _server;
+    dsn_address_t _server;
     
     rrdb_client *_rrdb_client;
 };
 
-class rrdb_perf_test_client_app : public ::dsn::service::service_app, public virtual ::dsn::service::servicelet
+class rrdb_perf_test_client_app : 
+    public ::dsn::service_app,
+    public virtual ::dsn::servicelet
 {
 public:
-    rrdb_perf_test_client_app(::dsn::service_app_spec* s)
-        : ::dsn::service::service_app(s)
+    rrdb_perf_test_client_app()
     {
         _rrdb_client = nullptr;
     }
@@ -118,9 +116,8 @@ public:
         if (argc < 2)
             return ::dsn::ERR_INVALID_PARAMETERS;
 
-        std::vector<::dsn::end_point> meta_servers;
-        auto cf = ::dsn::service::system::config();
-        ::dsn::replication::replication_app_client_base::load_meta_servers(cf, meta_servers);
+        std::vector<dsn_address_t> meta_servers;
+        ::dsn::replication::replication_app_client_base::load_meta_servers(meta_servers);
 
         _rrdb_client = new rrdb_perf_test_client(meta_servers, argv[1]);
         _rrdb_client->start_test();
@@ -140,4 +137,4 @@ private:
     rrdb_perf_test_client *_rrdb_client;
 };
 
-} }
+} } 

@@ -9,7 +9,7 @@ class rrdb_client
 {
 public:
     rrdb_client(
-        const std::vector<end_point>& meta_servers,
+        const std::vector<dsn_address_t>& meta_servers,
         const char* app_name)
         : ::dsn::replication::replication_app_client_base(meta_servers, app_name) 
     {
@@ -43,13 +43,13 @@ public:
         resp_task->wait();
         if (resp_task->error() == ::dsn::ERR_OK)
         {
-            unmarshall(resp_task->get_response()->reader(), resp);
+            ::unmarshall(resp_task->response(), resp);
         }
         return resp_task->error();
     }
     
     // - asynchronous with on-stack update_request and int 
-    ::dsn::rpc_response_task_ptr begin_put(
+    ::dsn::task_ptr begin_put(
         const update_request& update,
         void* context = nullptr,
         int timeout_milliseconds = 0, 
@@ -81,7 +81,7 @@ public:
     }
     
     // - asynchronous with on-heap std::shared_ptr<update_request> and std::shared_ptr<int> 
-    ::dsn::rpc_response_task_ptr begin_put2(
+    ::dsn::task_ptr begin_put2(
         std::shared_ptr<update_request>& update,         
         int timeout_milliseconds = 0, 
         int reply_hash = 0 
@@ -132,13 +132,13 @@ public:
         resp_task->wait();
         if (resp_task->error() == ::dsn::ERR_OK)
         {
-            unmarshall(resp_task->get_response()->reader(), resp);
+            ::unmarshall(resp_task->response(), resp);
         }
         return resp_task->error();
     }
     
     // - asynchronous with on-stack ::dsn::blob and int 
-    ::dsn::rpc_response_task_ptr begin_remove(
+    ::dsn::task_ptr begin_remove(
         const ::dsn::blob& key,
         void* context = nullptr,
         int timeout_milliseconds = 0, 
@@ -170,7 +170,7 @@ public:
     }
     
     // - asynchronous with on-heap std::shared_ptr<::dsn::blob> and std::shared_ptr<int> 
-    ::dsn::rpc_response_task_ptr begin_remove2(
+    ::dsn::task_ptr begin_remove2(
         std::shared_ptr<::dsn::blob>& key,         
         int timeout_milliseconds = 0, 
         int reply_hash = 0 
@@ -221,13 +221,13 @@ public:
         resp_task->wait();
         if (resp_task->error() == ::dsn::ERR_OK)
         {
-            unmarshall(resp_task->get_response()->reader(), resp);
+            ::unmarshall(resp_task->response(), resp);
         }
         return resp_task->error();
     }
     
     // - asynchronous with on-stack update_request and int 
-    ::dsn::rpc_response_task_ptr begin_merge(
+    ::dsn::task_ptr begin_merge(
         const update_request& update,
         void* context = nullptr,
         int timeout_milliseconds = 0, 
@@ -259,7 +259,7 @@ public:
     }
     
     // - asynchronous with on-heap std::shared_ptr<update_request> and std::shared_ptr<int> 
-    ::dsn::rpc_response_task_ptr begin_merge2(
+    ::dsn::task_ptr begin_merge2(
         std::shared_ptr<update_request>& update,         
         int timeout_milliseconds = 0, 
         int reply_hash = 0 
@@ -312,13 +312,13 @@ public:
         resp_task->wait();
         if (resp_task->error() == ::dsn::ERR_OK)
         {
-            unmarshall(resp_task->get_response()->reader(), resp);
+            ::unmarshall(resp_task->response(), resp);
         }
         return resp_task->error();
     }
     
     // - asynchronous with on-stack ::dsn::blob and read_response 
-    ::dsn::rpc_response_task_ptr begin_get(
+    ::dsn::task_ptr begin_get(
         const ::dsn::blob& key,
         void* context = nullptr,
         int timeout_milliseconds = 0, 
@@ -352,7 +352,7 @@ public:
     }
     
     // - asynchronous with on-heap std::shared_ptr<::dsn::blob> and std::shared_ptr<read_response> 
-    ::dsn::rpc_response_task_ptr begin_get2(
+    ::dsn::task_ptr begin_get2(
         std::shared_ptr<::dsn::blob>& key,         
         int timeout_milliseconds = 0, 
         int reply_hash = 0, 
