@@ -215,15 +215,7 @@ namespace dsn {
                    static_cast<long long int>(start), static_cast<long long int>(end),
                    state.files.size(), mem_state.size());
 
-            if (mem_state.size() == 0 && state.files.size() == 0)
-            {
-                // nothing to learn
-                dassert(end == start - 1, "");
-                dassert(end == last_committed_decree(), "");
-                return 0;
-            }
-
-            if (start == 0)
+            if (start == 0 && last_committed_decree() > 0)
             {
                 // learn from scratch, should clear db firstly and then re-create it
                 ddebug("start == 0, learn from scratch, clear db and then re-create it");
@@ -243,6 +235,14 @@ namespace dsn {
                     derror("open db %s failed, err = %d", data_dir().c_str(), err);
                     return err;
                 }
+            }
+
+            if (mem_state.size() == 0 && state.files.size() == 0)
+            {
+                // nothing to learn
+                dassert((start == 0 && end == 0) || end == start - 1, "");
+                dassert(end == last_committed_decree(), "");
+                return 0;
             }
 
             // rename 'learn_dir/xxx.sst' to 'data_dir/xxx.sst.learn' to avoid conflicting
