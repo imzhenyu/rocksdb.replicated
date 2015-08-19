@@ -540,8 +540,9 @@ class DB {
       return 0;
   }
 
-  // get delta state for learner [start, infinite)
-  virtual Status GetLearningState(/*out*/ SequenceNumber& start,
+  // get delta state for learner [start, infinite), with start >= 0
+  virtual Status GetLearningState(
+      /*in & out*/ SequenceNumber& start,
       /*out*/ SequenceNumber& end,
       /*out*/ std::string& mem_state,
       /*out*/ std::string& edit_encoded,
@@ -555,8 +556,8 @@ class DB {
   virtual Status ApplyLearningState(
       SequenceNumber start,
       SequenceNumber end,
-      std::string& mem_state,
-      std::string& edit_encoded
+      const std::string& mem_state,
+      const std::string& edit_encoded
       )
   { 
       return Status::Aborted(); 

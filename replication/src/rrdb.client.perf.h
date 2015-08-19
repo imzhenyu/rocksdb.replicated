@@ -61,7 +61,7 @@ public:
         
         auto rs = random64(0, 10000000);
         binary_writer writer(payload_bytes < 128 ? 128 : payload_bytes);
-        writer.write("key.");
+        writer.write("key.", 4);
         writer.write(rs);
         req.key = writer.get_buffer();
 
@@ -90,7 +90,7 @@ public:
 
         auto rs = random64(0, 10000000);
         binary_writer writer;
-        writer.write("key.");
+        writer.write("key.", 4);
         writer.write(rs);
         req = writer.get_buffer();
         
@@ -115,7 +115,7 @@ public:
 
         auto rs = random64(0, 10000000);
         binary_writer writer(payload_bytes < 128 ? 128 : payload_bytes);
-        writer.write("key.");
+        writer.write("key.", 4);
         writer.write(rs);
         req.key = writer.get_buffer();
 
@@ -144,7 +144,7 @@ public:
 
         auto rs = random64(0, 10000000);
         binary_writer writer;
-        writer.write("key.");
+        writer.write("key.", 4);
         writer.write(rs);
         req = writer.get_buffer();
         
