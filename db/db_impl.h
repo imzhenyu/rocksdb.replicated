@@ -162,8 +162,9 @@ class DBImpl : public DB {
   virtual SequenceNumber GetLatestSequenceNumber() const override;
   virtual SequenceNumber GetLatestDurableSequenceNumber() const override;
   
-  // get delta state for learner [start, infinite)
-  virtual Status GetLearningState(/*out*/ SequenceNumber& start,
+  // get delta state for learner [start, infinite), with start >= 0
+  virtual Status GetLearningState(
+      /*in & out*/ SequenceNumber& start,
       /*out*/ SequenceNumber& end,
       /*out*/ std::string& mem_state,
       /*out*/ std::string& edit_encoded,
@@ -174,20 +175,22 @@ class DBImpl : public DB {
   virtual Status ApplyLearningState(
       SequenceNumber start,
       SequenceNumber end,
-      std::string& mem_state,
-      std::string& edit_encoded
+      const std::string& mem_state,
+      const std::string& edit_encoded
       ) override;
 
+  // get delta state for learner memtables [start, infinite), with start >= 0
   Status GetLearningMemTableState(
       SequenceNumber start,
       SequenceNumber& end,
       /*out*/ std::string& mem_state
       );
 
+  // apply delta state for learnee memtables [start, infinite)
   Status ApplyLearningMemTableState(
       SequenceNumber start,
       SequenceNumber end,
-      std::string& mem_state
+      const std::string& mem_state
       );
   
 #ifndef ROCKSDB_LITE

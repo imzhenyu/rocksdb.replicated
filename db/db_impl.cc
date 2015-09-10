@@ -1926,7 +1926,7 @@ SequenceNumber DBImpl::GetLatestDurableSequenceNumber() const {
     return versions_->LastDurableSequence();
 }
 
-// get delta state for learner [start, infinite)
+// get delta state for learner [start, infinite), with start >= 0
 Status DBImpl::GetLearningState(
     /*in & out*/ SequenceNumber& start,
     /*out*/ SequenceNumber& end,
@@ -1946,28 +1946,22 @@ Status DBImpl::GetLearningState(
         "GetLearningState start=%llu, last_seq=%llu, last_durable_seq=%llu",
         start, last_seq, last_durable_seq);
 
-    // invalid
-    // { start == 0 }
-    if (start == 0)
-    {
-        mutex_.Unlock();
-
-        return Status::InvalidArgument("Invalid start sequence 0");
-    }
-
     // invalid 
     // { start > LastSequence + 1 }
     if (start > last_seq + 1)
     {
+        assert(start > 0);
+
         mutex_.Unlock();
 
         return Status::InvalidArgument("Invalid start sequence which is larger than learnee's latest one");
     }
 
-    // learning complete
+    // learn complete
     // { start == LastSequence + 1 }
-    else if (start == last_seq + 1)
+    if (start == last_seq + 1)
     {
+        assert(start > 0);
         end = start - 1;
 
         mutex_.Unlock();
@@ -1975,44 +1969,15 @@ Status DBImpl::GetLearningState(
         return Status::OK();
     }
 
-    // only learn mem_table state is enough
-    // { LastDurableSequence < start <= LastSequence }
-    else if (start > last_durable_seq)
+    // we have only Default column family as we don't use column family feature in replication yet
+    VersionStorageInfo* vsi = cfd->current()->storage_info();
+    vsi->UpdateNumNonEmptyLevels();
+
+    // learn sstable files
+    // { sstables_not_empty && (start == 0 || start <= LastDurableSequence) }
+    if (vsi->num_non_empty_levels() > 0
+            && (start == 0 || start <= last_durable_seq))
     {
-        /*
-        // Though GetLearningMemTableState() handles immutable memtables, 
-        // we can also choose to wait for flushing done.
-        if (cfd->imm()->NumNotFlushed() > 0)
-        {
-            mutex_.Unlock();
-            // wait for next round learning
-            return Status::Busy("flush sstables in progress");
-        }
-        */
-
-        SequenceNumber mem_end;
-        auto status = GetLearningMemTableState(start, mem_end, mem_state);
-
-        if (status.ok())
-        {
-            assert(mem_end == last_seq);
-            end = mem_end;
-        }
-
-        mutex_.Unlock();
-
-        return status;
-    }
-
-    // need to learn sstable files
-    // { start <= LastDurableSequence }
-    else
-    {
-        //
-        // we have only Default column family as we don't use column family feature in replication yet
-        //
-        VersionStorageInfo* vsi = cfd->current()->storage_info();
-
         // prepare edit
         VersionEdit edit;
         edit.SetColumnFamily(cfd->GetID());
@@ -2050,7 +2015,6 @@ Status DBImpl::GetLearningState(
                 }
             }
         }
-
         // copy all files in this case (as L1+ files are **not** sorted by sequence number)
         // { NumLevel0Files == 0 || start < Level0Min }
         else
@@ -2059,7 +2023,7 @@ Status DBImpl::GetLearningState(
                 "GetLearningState start=%llu, NumLevel0Files=%llu, Level0Min=%llu, set start to 0",
                 start, vsi->NumLevelFiles(0),
                 vsi->NumLevelFiles(0) > 0 ? vsi->LevelFiles(0).front()->smallest_seqno : 0);
-            start = 0;
+            start = 0; // 0 means learn from scratch
             for (int i = vsi->base_level(); i >= 0; i--)
             {
                 for (auto& v : vsi->LevelFiles(i))
@@ -2073,7 +2037,8 @@ Status DBImpl::GetLearningState(
         edit.EncodeTo(&edit_encoded);
         for (auto& v : edit.GetNewFiles())
         {
-            std::string s = MakeTableFileName(db_options_.db_paths[v.second.fd.GetPathId()].path, v.second.fd.GetNumber());
+            std::string s = MakeTableFileName(
+                        db_options_.db_paths[v.second.fd.GetPathId()].path, v.second.fd.GetNumber());
             sstables.push_back(s);
         }
 
@@ -2083,14 +2048,41 @@ Status DBImpl::GetLearningState(
 
         return Status::OK();
     }
+
+    // learn memtables
+
+    /*
+    // TODO(qinzuoyan) do some opt here
+    // Though GetLearningMemTableState() handles immutable memtables,
+    // we can also choose to wait for flushing done.
+    if (cfd->imm()->NumNotFlushed() > 0)
+    {
+        mutex_.Unlock();
+        // wait for next round learning
+        return Status::Busy("flush sstables in progress");
+    }
+    */
+
+    SequenceNumber mem_end;
+    auto status = GetLearningMemTableState(start, mem_end, mem_state);
+
+    if (status.ok())
+    {
+        assert(mem_end == last_seq);
+        end = mem_end;
+    }
+
+    mutex_.Unlock();
+
+    return status;
 }
 
 // apply delta state for learnee [start, infinite)
 Status DBImpl::ApplyLearningState(
     SequenceNumber start,
     SequenceNumber end,
-    std::string& mem_state,
-    std::string& edit_encoded
+    const std::string& mem_state,
+    const std::string& edit_encoded
     )
 {
     //
@@ -2197,6 +2189,7 @@ Status DBImpl::ApplyLearningState(
     return st;
 }
 
+// get delta state for learner memtables [start, infinite), with start >= 0
 Status DBImpl::GetLearningMemTableState(
     SequenceNumber start,
     SequenceNumber& end,
@@ -2205,7 +2198,7 @@ Status DBImpl::GetLearningMemTableState(
 {
     mutex_.AssertHeld();
 
-    assert(start > versions_->last_durable_sequence_);
+    assert(start == 0 || start > versions_->last_durable_sequence_);
     ColumnFamilyData* cfd = versions_->column_family_set_->GetDefault();
 
     Status s;
@@ -2217,7 +2210,7 @@ Status DBImpl::GetLearningMemTableState(
     size_t reserve_size = 0;
     memtables.push_back(cfd->mem()); // add current live memtable
     cfd->imm()->current()->GetMemtableList(&memtables); // add immutable memtables
-    end = start - 1;
+    end = (start == 0 ? 0 : start - 1);
     for (auto m : memtables)
     {
         if (m->IsEmpty() || start > m->GetLastSequenceNumber())
@@ -2270,7 +2263,6 @@ Status DBImpl::GetLearningMemTableState(
 
         if (!s.ok())
         {
-            end = start - 1;
             mem_state.clear();
             break;
         }
@@ -2301,10 +2293,11 @@ struct MemtableEntry
     }
 };
 
+// apply delta state for learnee memtables [start, infinite)
 Status DBImpl::ApplyLearningMemTableState(
     SequenceNumber start,
     SequenceNumber end,
-    std::string& mem_state
+    const std::string& mem_state
     )
 {
     Slice contents(mem_state.data(), mem_state.size());
