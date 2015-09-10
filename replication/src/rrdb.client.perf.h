@@ -7,7 +7,7 @@ namespace dsn { namespace apps { class rrdb_perf_test_client
 {
 public:
     rrdb_perf_test_client(
-        const std::vector<dsn_address_t>& meta_servers,
+        const std::vector<::dsn::rpc_address>& meta_servers,
         const char* app_name)
         : rrdb_client(meta_servers, app_name)
     {

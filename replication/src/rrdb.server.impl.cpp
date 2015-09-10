@@ -154,7 +154,7 @@ namespace dsn {
             return status.code();
         }
 
-        void rrdb_service_impl::prepare_learning_request(__out_param blob& learn_req)
+        void rrdb_service_impl::prepare_learning_request(/*out*/ blob& learn_req)
         {
             // nothing to do
         }
@@ -162,7 +162,7 @@ namespace dsn {
         int  rrdb_service_impl::get_learn_state(
             ::dsn::replication::decree start, 
             const blob& learn_req, 
-            __out_param ::dsn::replication::learn_state& state)
+            /*out*/ ::dsn::replication::learn_state& state)
         {
             dassert(_is_open, "rrdb service %s is not ready", data_dir().c_str());
 

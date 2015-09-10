@@ -8,10 +8,23 @@ class rrdb_client
     : public ::dsn::replication::replication_app_client_base
 {
 public:
+    // client used in rDSN-threads
     rrdb_client(
-        const std::vector<dsn_address_t>& meta_servers,
-        const char* app_name)
-        : ::dsn::replication::replication_app_client_base(meta_servers, app_name) 
+        const std::vector<::dsn::rpc_address>& meta_servers,
+        const char* replicate_app_name)
+        : ::dsn::replication::replication_app_client_base(meta_servers, replicate_app_name)
+    {
+    }
+
+    // client used outside rDSN-threads
+    rrdb_client(
+        const std::vector<::dsn::rpc_address>& meta_servers,
+        const char* replicate_app_name,
+        const char* host_app_name,
+        int host_app_index = 1
+        )
+        : ::dsn::replication::replication_app_client_base(
+        meta_servers, replicate_app_name, host_app_name, host_app_index)
     {
     }
     
@@ -26,7 +39,7 @@ public:
     // - synchronous 
     ::dsn::error_code put(
         const update_request& update, 
-        __out_param int& resp, 
+        /*out*/ int& resp, 
         int timeout_milliseconds = 0 
         )
     {
@@ -115,7 +128,7 @@ public:
     // - synchronous 
     ::dsn::error_code remove(
         const ::dsn::blob& key, 
-        __out_param int& resp, 
+        /*out*/ int& resp, 
         int timeout_milliseconds = 0 
         )
     {
@@ -204,7 +217,7 @@ public:
     // - synchronous 
     ::dsn::error_code merge(
         const update_request& update, 
-        __out_param int& resp, 
+        /*out*/ int& resp, 
         int timeout_milliseconds = 0 
         )
     {
@@ -293,7 +306,7 @@ public:
     // - synchronous 
     ::dsn::error_code get(
         const ::dsn::blob& key, 
-        __out_param read_response& resp, 
+        /*out*/ read_response& resp, 
         int timeout_milliseconds = 0, 
         ::dsn::replication::read_semantic_t read_semantic = ::dsn::replication::read_semantic_t::ReadLastUpdate 
         )

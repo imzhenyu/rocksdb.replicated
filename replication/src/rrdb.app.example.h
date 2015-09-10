@@ -7,7 +7,7 @@ namespace dsn { namespace apps {
 // client app example
 class rrdb_client_app : 
     public ::dsn::service_app,
-    public virtual ::dsn::servicelet
+    public virtual ::dsn::clientlet
 {
 public:
     rrdb_client_app()
@@ -25,7 +25,7 @@ public:
         if (argc < 2)
             return ::dsn::ERR_INVALID_PARAMETERS;
 
-        std::vector<dsn_address_t> meta_servers;
+        std::vector<::dsn::rpc_address> meta_servers;
         ::dsn::replication::replication_app_client_base::load_meta_servers(meta_servers);
         
         _rrdb_client = new rrdb_client(meta_servers, argv[1]);
@@ -94,14 +94,14 @@ public:
 
 private:
     ::dsn::task_ptr _timer;
-    dsn_address_t _server;
+    ::dsn::rpc_address _server;
     
     rrdb_client *_rrdb_client;
 };
 
 class rrdb_perf_test_client_app : 
     public ::dsn::service_app,
-    public virtual ::dsn::servicelet
+    public virtual ::dsn::clientlet
 {
 public:
     rrdb_perf_test_client_app()
@@ -119,7 +119,7 @@ public:
         if (argc < 2)
             return ::dsn::ERR_INVALID_PARAMETERS;
 
-        std::vector<dsn_address_t> meta_servers;
+        std::vector<::dsn::rpc_address> meta_servers;
         ::dsn::replication::replication_app_client_base::load_meta_servers(meta_servers);
 
         _rrdb_client = new rrdb_perf_test_client(meta_servers, argv[1]);

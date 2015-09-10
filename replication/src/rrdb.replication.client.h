@@ -25,7 +25,7 @@ public:
 	// - synchronous 
 	::dsn::error_code put(
 		const update_request& update, 
-		__out_param int& resp, 
+		/*out*/ int& resp, 
 		int timeout_milliseconds = 0
 		)
 	{
@@ -109,7 +109,7 @@ public:
 	// - synchronous 
 	::dsn::error_code remove(
 		const ::dsn::blob& key, 
-		__out_param int& resp, 
+		/*out*/ int& resp, 
 		int timeout_milliseconds = 0
 		)
 	{
@@ -193,7 +193,7 @@ public:
 	// - synchronous 
 	::dsn::error_code merge(
 		const update_request& update, 
-		__out_param int& resp, 
+		/*out*/ int& resp, 
 		int timeout_milliseconds = 0
 		)
 	{
@@ -277,7 +277,7 @@ public:
 	// - synchronous 
 	::dsn::error_code get(
 		const ::dsn::blob& key, 
-		__out_param read_response& resp, 
+		/*out*/ read_response& resp, 
 		int timeout_milliseconds = 0
 		)
 	{
