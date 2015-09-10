@@ -26,7 +26,7 @@ namespace dsn { namespace apps {
         ::dsn::marshall_rpc_args<update_request>(&proto, val, &update_request::write);
     };
 
-    inline void unmarshall(::dsn::binary_reader& reader, __out_param update_request& val)
+    inline void unmarshall(::dsn::binary_reader& reader, /*out*/ update_request& val)
     {
         boost::shared_ptr<::dsn::binary_reader_transport> transport(new ::dsn::binary_reader_transport(reader));
         ::apache::thrift::protocol::TBinaryProtocol proto(transport);
@@ -41,7 +41,7 @@ namespace dsn { namespace apps {
         ::dsn::marshall_rpc_args<read_response>(&proto, val, &read_response::write);
     };
 
-    inline void unmarshall(::dsn::binary_reader& reader, __out_param read_response& val)
+    inline void unmarshall(::dsn::binary_reader& reader, /*out*/ read_response& val)
     {
         boost::shared_ptr<::dsn::binary_reader_transport> transport(new ::dsn::binary_reader_transport(reader));
         ::apache::thrift::protocol::TBinaryProtocol proto(transport);
@@ -67,7 +67,7 @@ namespace dsn { namespace apps {
         marshall(writer, val.value);
     };
 
-    inline void unmarshall(::dsn::binary_reader& reader, __out_param update_request& val)
+    inline void unmarshall(::dsn::binary_reader& reader, /*out*/ update_request& val)
     {
         unmarshall(reader, val.key);
         unmarshall(reader, val.value);
@@ -86,7 +86,7 @@ namespace dsn { namespace apps {
         marshall(writer, val.value);
     };
 
-    inline void unmarshall(::dsn::binary_reader& reader, __out_param read_response& val)
+    inline void unmarshall(::dsn::binary_reader& reader, /*out*/ read_response& val)
     {
         unmarshall(reader, val.error);
         unmarshall(reader, val.value);

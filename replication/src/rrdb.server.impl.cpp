@@ -1,5 +1,4 @@
 # include "rrdb.server.impl.h"
-# include <boost/filesystem.hpp>
 
 # ifdef __TITLE__
 # undef __TITLE__
@@ -15,6 +14,9 @@ namespace dsn {
 
             // disable write ahead logging as replication handles logging instead now
             _wt_opts.disableWAL = true;
+
+            // set flag so replication knows how to learn
+            set_delta_state_learning_supported();
         }
 
         void rrdb_service_impl::on_empty_write()
@@ -105,6 +107,13 @@ namespace dsn {
             opts.error_if_exists = create_new;
             opts.write_buffer_size = 40 * 1024; // 40 K for testing now
 
+            if (create_new)
+            {
+                auto& dir = data_dir();
+                dsn::utils::filesystem::remove_path(dir);
+                dsn::utils::filesystem::create_directory(dir);
+            }
+
             auto status = rocksdb::DB::Open(opts, data_dir() + "/rdb", &_db);
             if (status.ok())
             {
@@ -135,9 +144,10 @@ namespace dsn {
 
             if (clear_state)
             {
-                boost::filesystem::path lp = data_dir();
-                ::boost::filesystem::remove_all(lp);
-                ::boost::filesystem::create_directory(lp);
+                if (!dsn::utils::filesystem::remove_path(data_dir()))
+                {
+                    dassert(false, "Fail to delete directory %s.", data_dir().c_str());
+                }
             }
 
             return 0;
@@ -154,7 +164,7 @@ namespace dsn {
             return status.code();
         }
 
-        void rrdb_service_impl::prepare_learning_request(__out_param blob& learn_req)
+        void rrdb_service_impl::prepare_learning_request(/*out*/ blob& learn_req)
         {
             // nothing to do
         }
@@ -162,7 +172,7 @@ namespace dsn {
         int  rrdb_service_impl::get_learn_state(
             ::dsn::replication::decree start, 
             const blob& learn_req, 
-            __out_param ::dsn::replication::learn_state& state)
+            /*out*/ ::dsn::replication::learn_state& state)
         {
             dassert(_is_open, "rrdb service %s is not ready", data_dir().c_str());
 
@@ -249,26 +259,20 @@ namespace dsn {
             // with exist files.
             for (auto &f : state.files)
             {
-                boost::filesystem::path old_p = learn_dir() + f;
-                boost::filesystem::path new_p = data_dir() + f + ".learn";
+                std::string old_p = learn_dir() + f;
+                std::string new_p = data_dir() + f + ".learn";
 
                 // create directory recursively if necessary
-                boost::filesystem::path path = new_p;
-                path = path.remove_filename();
-                if (!boost::filesystem::exists(path))
-                    boost::filesystem::create_directories(path);
+                std::string path = new_p;
+                path = ::dsn::utils::filesystem::remove_file_name(path);
+                if (!::dsn::utils::filesystem::path_exists(path))
+                    ::dsn::utils::filesystem::create_directory(path);
 
-                try
-                {
-                    boost::filesystem::rename(old_p, new_p);
-                }
-                catch (const boost::filesystem::filesystem_error& e)
+                if (!::dsn::utils::filesystem::rename_path(old_p, new_p))
                 {
                     // TODO(qinzuoyan) delete garbage files
-                    derror("rename %s to %s failed, err = %s",
-                           old_p.string().c_str(), new_p.string().c_str(), e.what());
-                    dassert(e.code().value() != 0, "");
-                    return e.code().value();
+                    derror("rename %s to %s failed", old_p.c_str(), new_p.c_str());
+                    return ERR_FILE_OPERATION_FAILED;
                 }
             }
 

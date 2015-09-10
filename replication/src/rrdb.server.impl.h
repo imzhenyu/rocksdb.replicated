@@ -19,9 +19,9 @@ namespace dsn {
             virtual int  close(bool clear_state);
             virtual int  flush(bool wait);
             virtual void on_empty_write();
-            virtual void prepare_learning_request(__out_param blob& learn_req);
+            virtual void prepare_learning_request(/*out*/ blob& learn_req);
             virtual int  get_learn_state(::dsn::replication::decree start,
-                    const blob& learn_req, __out_param ::dsn::replication::learn_state& state);
+                    const blob& learn_req, /*out*/ ::dsn::replication::learn_state& state);
             virtual int  apply_learn_state(::dsn::replication::learn_state& state);
             virtual ::dsn::replication::decree last_durable_decree() const;
 
