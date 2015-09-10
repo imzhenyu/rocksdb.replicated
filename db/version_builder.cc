@@ -27,12 +27,15 @@
 
 namespace rocksdb {
 
+// because after learning, files in level-0 may have overlap in seqno, for example:
+//   f1->smallest_seqno < f2->smallest_seqno && f1->f1->largest_seqno > f2->largest_seqno
+// so we change the sort strategy, using largest_seqno as the first sort key.
 bool NewestFirstBySeqNo(FileMetaData* a, FileMetaData* b) {
-  if (a->smallest_seqno != b->smallest_seqno) {
-    return a->smallest_seqno > b->smallest_seqno;
-  }
   if (a->largest_seqno != b->largest_seqno) {
     return a->largest_seqno > b->largest_seqno;
+  }
+  if (a->smallest_seqno != b->smallest_seqno) {
+    return a->smallest_seqno > b->smallest_seqno;
   }
   // Break ties by file number
   return a->fd.GetNumber() > b->fd.GetNumber();
@@ -130,7 +133,10 @@ class VersionBuilder::Rep {
         auto f2 = level_files[i];
         if (level == 0) {
           assert(level_zero_cmp_(f1, f2));
-          assert(f1->largest_seqno > f2->largest_seqno);
+          // because after learning, files in level-0 may have overlap in seqno, for example:
+          //   f1->smallest_seqno < f2->smallest_seqno && f1->f1->largest_seqno > f2->largest_seqno
+          // so the following assert is disabled
+          //assert(f1->largest_seqno > f2->largest_seqno);
         } else {
           assert(level_nonzero_cmp_(f1, f2));
 
