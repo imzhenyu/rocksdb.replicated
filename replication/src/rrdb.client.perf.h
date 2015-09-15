@@ -3,7 +3,7 @@
 # include "rrdb.client.h"
 
 namespace dsn { namespace apps { class rrdb_perf_test_client
-    : public rrdb_client, public ::dsn::service::perf_client_helper<rrdb_perf_test_client>
+    : public rrdb_client, public ::dsn::service::perf_client_helper
 {
 public:
     rrdb_perf_test_client(

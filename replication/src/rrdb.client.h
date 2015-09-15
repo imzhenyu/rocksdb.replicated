@@ -8,26 +8,13 @@ class rrdb_client
     : public ::dsn::replication::replication_app_client_base
 {
 public:
-    // client used in rDSN-threads
     rrdb_client(
         const std::vector<::dsn::rpc_address>& meta_servers,
         const char* replicate_app_name)
         : ::dsn::replication::replication_app_client_base(meta_servers, replicate_app_name)
     {
     }
-
-    // client used outside rDSN-threads
-    rrdb_client(
-        const std::vector<::dsn::rpc_address>& meta_servers,
-        const char* replicate_app_name,
-        const char* host_app_name,
-        int host_app_index = 1
-        )
-        : ::dsn::replication::replication_app_client_base(
-        meta_servers, replicate_app_name, host_app_name, host_app_index)
-    {
-    }
-    
+        
     virtual ~rrdb_client() {}
     
     // from requests to partition index

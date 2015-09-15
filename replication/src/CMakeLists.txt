@@ -1,13 +1,18 @@
 cmake_minimum_required(VERSION 2.8.8)
 
-if(UNIX)
-	set(DSN_ROOT "${CMAKE_SOURCE_DIR}/../../../rDSN/builder/output")
-else()
-	set(DSN_ROOT "E:/rDSN")	
-endif()
+#if(UNIX)
+#	set(DSN_ROOT "${CMAKE_SOURCE_DIR}/../../../rDSN/builder/output")
+#else()
+#	set(DSN_ROOT "E:/rDSN")	
+#endif()
 
-if(NOT EXISTS "${DSN_ROOT}/")
-    message(FATAL_ERROR "Please make sure that ${DSN_ROOT} exists.")
+#if(NOT EXISTS "${DSN_ROOT}/")
+#    message(FATAL_ERROR "Please make sure that ${DSN_ROOT} exists.")
+#endif()
+
+set(DSN_ROOT "$ENV{DSN_ROOT}")
+if((DSN_ROOT STREQUAL "") OR (NOT EXISTS "${DSN_ROOT}/"))
+    message(FATAL_ERROR "Please set the environment variable DSN_ROOT to the correct rdsn installation path.")
 endif()
 
 include("${DSN_ROOT}/bin/dsn.cmake")
