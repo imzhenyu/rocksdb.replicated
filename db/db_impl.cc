@@ -18,6 +18,7 @@
 #include <climits>
 #include <cstdio>
 #include <set>
+#include <sstream>
 #include <stdexcept>
 #include <stdint.h>
 #include <string>
@@ -2130,11 +2131,20 @@ Status DBImpl::ApplyLearningState(
             if (versions_->current_next_file_number() > min_fno)
             {
                 uint64_t fno_inc = max_fno - min_fno + 1;
+                std::ostringstream oss;
                 for (auto& kv : new_files)
                 {
                     auto& nf = kv.second;
                     std::string oldfn = MakeTableFileName(dbname_, nf.fd.GetNumber()) + ".learn";
                     std::string newfn = MakeTableFileName(dbname_, nf.fd.GetNumber() + fno_inc);
+
+                    bool exist = env_->FileExists(newfn);
+                    if (exist)
+                    {
+                        // TODO: delete obsolete files?
+                        mutex_.Unlock();
+                        return Status::Corruption("ApplyLearningState file already exist: ", newfn);
+                    }
 
                     status = env_->RenameFile(oldfn, newfn);
                     if (!status.ok())
@@ -2144,9 +2154,13 @@ Status DBImpl::ApplyLearningState(
                         return status;
                     }
 
+                    oss << "#" << nf.fd.GetNumber() << "->#" << (nf.fd.GetNumber() + fno_inc) << " ";
                     nf.fd = FileDescriptor(nf.fd.GetNumber() + fno_inc, nf.fd.GetPathId(), nf.fd.GetFileSize());
                 }
-                
+
+                Log(InfoLogLevel::INFO_LEVEL, db_options_.info_log,
+                    "ApplyLearningState, rename files: %s", oss.str().c_str());
+
                 // increase fno to prevent future confliction
                 while (versions_->NewFileNumber() <= fno_inc + max_fno);
             }
@@ -2159,6 +2173,14 @@ Status DBImpl::ApplyLearningState(
                     std::string oldfn = MakeTableFileName(dbname_, nf.fd.GetNumber()) + ".learn";
                     std::string newfn = MakeTableFileName(dbname_, nf.fd.GetNumber());
 
+                    bool exist = env_->FileExists(newfn);
+                    if (exist)
+                    {
+                        // TODO: delete obsolete files?
+                        mutex_.Unlock();
+                        return Status::Corruption("ApplyLearningState file already exist: ", newfn);
+                    }
+
                     status = env_->RenameFile(oldfn, newfn);
                     if (!status.ok())
                     {
@@ -2168,6 +2190,16 @@ Status DBImpl::ApplyLearningState(
                     }
                 }
             }
+
+            std::ostringstream oss;
+            for (auto& kv : new_files)
+            {
+                auto& nf = kv.second;
+                oss << "#" << nf.fd.GetNumber() << " ";
+            }
+
+            Log(InfoLogLevel::INFO_LEVEL, db_options_.info_log,
+                "ApplyLearningState, LogAndApply: %s", oss.str().c_str());
 
             status = versions_->LogAndApply(cfd, mutable_cf_options, &edit, &mutex_);
             if (!status.ok())
