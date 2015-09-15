@@ -2128,7 +2128,7 @@ Status DBImpl::ApplyLearningState(
                     max_fno = kv.second.fd.GetNumber();
             }
 
-            if (versions_->current_next_file_number() > min_fno)
+            if (versions_->current_next_file_number() >= min_fno)
             {
                 uint64_t fno_inc = max_fno - min_fno + 1;
                 std::ostringstream oss;
